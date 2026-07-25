@@ -2,7 +2,7 @@ Source: ck-wifikiller
 Section: net
 Priority: optional
 Maintainer: 传康Kk <1837620622@qq.com>
-Build-Depends: debhelper-compat (= 13), dh-python, python3-all, python3-setuptools
+Build-Depends: debhelper-compat (= 13), dh-python, python3-all, python3-setuptools, py3build, python3-pybuild-plugin-pyproject
 Standards-Version: 4.6.2
 Homepage: https://github.com/cknb6/ck-wifikiller
 Rules-Requires-Root: no
