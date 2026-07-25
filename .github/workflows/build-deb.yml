@@ -23,7 +23,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             git build-essential debhelper dh-python python3-all python3-setuptools \
-            python3-pybuild dpkg-dev
+            dpkg-dev
 
       - uses: actions/checkout@v4
         with:
