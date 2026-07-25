@@ -30,8 +30,8 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends \
             ca-certificates git build-essential debhelper dh-python \
-            python3-all python3-setuptools python3-pybuild-plugin-pyproject \
-            py3build dpkg-dev lintian
+            python3-all python3-setuptools python3-wheel \
+            dpkg-dev lintian
           # 容器内 checkout 的 repo 所有者可能与运行用户不一致，
           # 配置 safe.directory 避免 git dubious ownership 报错。
           git config --global --add safe.directory '*'
