@@ -1,12 +1,42 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>ck-wifikiller apt repository</title></head>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ck-wifikiller apt repository</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
+    pre { background: #f4f4f5; padding: 1rem; overflow-x: auto; border-radius: 6px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    h1,h2 { line-height: 1.2; }
+    .note { border-left: 3px solid #2563eb; padding-left: 0.75rem; color: #333; }
+  </style>
+</head>
 <body>
-<h1>ck-wifikiller apt repository</h1>
-<p>Authorized security testing only.</p>
-<h2>Install</h2>
-<pre>echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
+  <h1>ck-wifikiller apt repository</h1>
+  <p>Authorized security testing only. 仅限授权安全测试。</p>
+  <p class="note">
+    Kali 默认源<strong>不包含</strong>本包。必须先添加下面的第三方源，再 <code>apt install</code>。
+    只执行 <code>sudo apt install ck-wifikiller</code> 会报「无法定位软件包」。
+  </p>
+
+  <h2>Install (Kali / Debian)</h2>
+  <pre>echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
   | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
 sudo apt update
-sudo apt install ck-wifikiller</pre>
-<p><a href="https://github.com/cknb6/ck-wifikiller">GitHub source</a></p>
-</body></html>
+sudo apt install -y ck-wifikiller</pre>
+
+  <h2>Upgrade</h2>
+  <pre>sudo apt update
+sudo apt install --only-upgrade ck-wifikiller</pre>
+
+  <h2>Fallback: download .deb from GitHub Releases</h2>
+  <pre>curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.1/ck-wifikiller_2.5.1_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.1_all.deb</pre>
+
+  <p>
+    <a href="https://github.com/cknb6/ck-wifikiller">Source</a> ·
+    <a href="https://github.com/cknb6/ck-wifikiller/releases">Releases</a>
+  </p>
+</body>
+</html>
