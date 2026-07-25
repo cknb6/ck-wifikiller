@@ -21,3 +21,26 @@ Description: Automated wireless auditor for modern Kali (wifite2 fork)
  .
  For authorized security testing only.
 
+Package: ck-wifikiller
+Version: 2.5.1
+Architecture: all
+Maintainer: 传康Kk <1837620622@qq.com>
+Installed-Size: 2983
+Depends: python3:any, python3, aircrack-ng, hashcat, hcxtools, hcxdumptool, tshark | wireshark-common, iw, net-tools
+Recommends: reaver, bully, macchanger, kismet, bettercap
+Filename: repo/pool/main/c/ck-wifikiller/ck-wifikiller_2.5.1_all.deb
+Size: 997284
+MD5sum: 8be0e4d298bb8d411c760acf259fcb36
+SHA1: 995e958f415800e8c6f56e9621dd48134be9ab7c
+SHA256: dc61573c18df1f10070254e0f33de784761a77cbf42b914e2ec7acc7ff7abac9
+Section: net
+Priority: optional
+Homepage: https://github.com/cknb6/ck-wifikiller
+Description: Automated wireless auditor for modern Kali (wifite2 fork)
+ ck-wifikiller is a maintained fork of wifite2 focused on Kali Linux
+ 2024-2026 toolchains: hashcat mode 22000, hcxpcapngtool, PMKID capture
+ with modern hcxdumptool BPF filters, and Layer-1 recon orchestration
+ (Kismet / bettercap).
+ .
+ For authorized security testing only.
+
