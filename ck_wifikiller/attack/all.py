@@ -100,10 +100,6 @@ class AttackAll(object):
                     attack = attack_obj
                     if result:
                         break
-                except Exception as e:
-                    Color.pexception(e)
-                    attack = attack_obj
-                    continue
                 except KeyboardInterrupt:
                     Color.pl('\n{!} {O}Interrupted{W}\n')
                     answer = cls.user_wants_to_continue(
@@ -113,6 +109,10 @@ class AttackAll(object):
                     if answer is None:
                         return True
                     return False
+                except Exception as e:
+                    Color.pexception(e)
+                    attack = attack_obj
+                    continue
         finally:
             Configuration.pmkid_timeout = saved['pmkid']
             Configuration.wps_pixie_timeout = saved['pixie']
@@ -142,15 +142,15 @@ class AttackAll(object):
 
     @staticmethod
     def _apply_timeouts(name: str, seconds: int) -> None:
-        min_s = max(15, int(getattr(Configuration, 'attack_min_slice', 15) or 15))
-        seconds = max(min_s, int(seconds))
+        # 切片已在分配阶段保证 >= min_slice；此处只保证正数，
+        # 不把剩余不足 15s 的尾巴再强行抬回 15（避免拖垮总预算）。
+        seconds = max(1, int(seconds))
         if name == 'pmkid':
             Configuration.pmkid_timeout = seconds
         elif name == 'wps_pixie':
             Configuration.wps_pixie_timeout = seconds
         elif name == 'wps_pin':
             Configuration.wps_pin_timeout = seconds
-            # PIN 墙钟：reaver/bully 统一读该字段（见 tools 补丁）
             Configuration.wps_pixie_timeout = seconds
         elif name == 'handshake':
             Configuration.wpa_attack_timeout = seconds

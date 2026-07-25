@@ -1,3 +1,12 @@
+ck-wifikiller (2.5.4-1) unstable; urgency=medium
+
+  * Attack schedule: brand-ordered paths, min 15s per vector, 60s target budget.
+  * Do not skip PIN/Pixie/PMKID by default; only drop WPS when scan says none.
+  * UI: display-width table alignment; splash/main i18n (zh or en, not mixed).
+  * Concise attack output; no defensive checklists.
+
+ -- 传康Kk <1837620622@qq.com>  Sat, 25 Jul 2026 23:50:00 +0800
+
 ck-wifikiller (2.5.3-1) unstable; urgency=medium
 
   * Expand built-in WPA wordlist: 8–63 only, CN-first weak passwords, larger set.

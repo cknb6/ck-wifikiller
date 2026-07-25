@@ -10,11 +10,11 @@ Authorized security testing only. 仅限授权安全测试。
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![hashcat](https://img.shields.io/badge/hashcat-m%2022000-49A942)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.3-success)](https://github.com/cknb6/ck-wifikiller/releases)
+[![Release](https://img.shields.io/badge/Release-v2.5.4-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 ```
 GitHub:  https://github.com/cknb6/ck-wifikiller
-Version: CK_WIFI_VERSION env > git describe > 2.5.3-ck
+Version: CK_WIFI_VERSION env > git describe > 2.5.4-ck
 Author:  传康Kk（万能程序员）
 WeChat:  1837620622  (赞助备注「wifi赞助」/ 商务「商务合作」)
 Email:   2040168455@qq.com
@@ -128,8 +128,8 @@ Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `
 ### 2) Manual `.deb` from Releases (no apt repo)
 
 ```bash
-curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.3/ck-wifikiller_2.5.3_all.deb
-sudo apt install -y ./ck-wifikiller_2.5.3_all.deb
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.4/ck-wifikiller_2.5.4_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.4_all.deb
 ```
 
 ### 3) From source
@@ -260,7 +260,7 @@ Tag-triggered CI (`.github/workflows/build-deb.yml`):
 3. **publish-release** — GitHub Release with `.deb` and `SHA256SUMS`
 
 ```bash
-git tag v2.5.3 && git push origin v2.5.3
+git tag v2.5.4 && git push origin v2.5.4
 ```
 
 Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is the canonical path.
