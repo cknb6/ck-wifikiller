@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from ..model.attack import Attack
@@ -73,13 +73,20 @@ class AttackWPA(Attack):
             # 国内 WiFi 智能优化：aircrack 字典失败后，转 hc22000 走 hashcat 掩码管线（闭环）
             if getattr(Configuration, 'cn_optimize', False):
                 key = self._cn_mask_pipeline(handshake)
-            if key is None:
-                self.success = False
-        else:
-            Color.pl('{+} {G}Cracked WPA Handshake{W} PSK: {G}%s{W}\n' % key)
-            self.crack_result = CrackResultWPA(handshake.bssid, handshake.essid, handshake.capfile, key)
-            self.crack_result.dump()
-            self.success = True
+
+        if key is None:
+            self.success = False
+            return False
+
+        Color.pl('{+} {G}Cracked WPA Handshake{W} PSK: {G}%s{W}\n' % key)
+        self.crack_result = CrackResultWPA(
+            handshake.bssid,
+            handshake.essid,
+            handshake.capfile,
+            key,
+        )
+        self.crack_result.dump()
+        self.success = True
         return self.success
 
 

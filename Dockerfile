@@ -1,81 +1,28 @@
-FROM python:2.7.14-jessie
+# ck-wifikiller 容器镜像 — 现代 Kali 工具链 + Python3
+# 替代已废弃的 python:2.7-jessie 镜像，适配 2024-2026 Kali Rolling。
+# 用法: docker build -t ck-wifikiller . && docker run --rm --net=host --privileged ck-wifikiller
+FROM kalilinux/kali-rolling:latest
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV HASHCAT_VERSION hashcat-3.6.0
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV PYTHONUNBUFFERED=1
 
-# Install requirements
-RUN echo "deb-src http://deb.debian.org/debian jessie main" >> /etc/apt/sources.list
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install ca-certificates gcc openssl make kmod nano wget p7zip build-essential libsqlite3-dev libpcap0.8-dev libpcap-dev sqlite3 pkg-config libnl-genl-3-dev libssl-dev net-tools iw ethtool usbutils pciutils wireless-tools git curl wget unzip macchanger pyrit tshark -y
-RUN apt-get build-dep aircrack-ng -y
+# 现代 Kali 工具链：aircrack-ng / hashcat / hcxtools / hcxdumptool / tshark
+# + WPS (reaver/bully) + recon (kismet/bettercap) + 内核无线工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git python3 python3-pip python3-setuptools \
+        aircrack-ng hashcat hcxtools hcxdumptool tshark \
+        reaver bully macchanger \
+        kismet bettercap \
+        iw net-tools wireless-tools iproute2 pciutils usbutils tcpdump && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# 安装 ck-wifikiller（从源码）
+WORKDIR /opt/ck-wifikiller
+COPY . /opt/ck-wifikiller
+RUN pip3 install --no-cache-dir --break-system-packages .
 
-
-#Install Aircrack from Source
-RUN wget http://download.aircrack-ng.org/aircrack-ng-1.2-rc4.tar.gz
-RUN tar xzvf aircrack-ng-1.2-rc4.tar.gz
-WORKDIR /aircrack-ng-1.2-rc4/
-RUN make
-RUN make install
-RUN airodump-ng-oui-update
-
-# Workdir /
-WORKDIR /
-
-# Install wps-pixie
-RUN git clone https://github.com/wiire/pixiewps
-WORKDIR /pixiewps/
-RUN make
-RUN make install
-
-
-# Workdir /
-WORKDIR /
-
-
-# Install bully
-RUN git clone https://github.com/aanarchyy/bully
-WORKDIR /bully/src/
-RUN make
-RUN make install
-
-
-
-# Workdir /
-WORKDIR /
-
-#Install and configure hashcat
-RUN mkdir hashcat && \
-    cd hashcat && \
-    wget https://hashcat.net/files_legacy/${HASHCAT_VERSION}.7z && \
-    7zr e ${HASHCAT_VERSION}.7z
-
-
-#Add link for binary
-RUN ln -s /hashcat/hashcat-cli64.bin /usr/bin/hashcat
-
-
-# Install reaver
-RUN git clone https://github.com/gabrielrcouto/reaver-wps.git
-WORKDIR /reaver-wps/src/
-RUN ./configure
-RUN make
-RUN make install
-
-# Workdir /
-WORKDIR /
-
-# Install cowpatty
-RUN git clone https://github.com/roobixx/cowpatty.git
-WORKDIR /cowpatty/
-RUN make
-
-# Workdir /
-WORKDIR /
-
-# Install wifite
-RUN git clone https://github.com/derv82/wifite2.git
-WORKDIR /wifite2/
-ENTRYPOINT ["/bin/bash"]
+# 默认入口：ck-wifikiller（容器内以 root 运行，需挂载无线网卡）
+ENTRYPOINT ["ck-wifikiller"]
 
 

@@ -35,7 +35,7 @@ class CKWifiKiller(object):
         if os.getuid() != 0 and not Configuration.recon_mode:
             Color.pl('{!} {R}error: {O}ck-wifikiller{R} must be run as {O}root{W}')
             Color.pl('{!} {R}re-run with {O}sudo{W}')
-            Configuration.exit_gracefully(0)
+            Configuration.exit_gracefully(1)
         elif os.getuid() != 0 and Configuration.recon_mode in ('kismet', 'bettercap'):
             Color.pl('{!} {O}提示: 启动 Kismet/bettercap 通常需要 root{W}')
 
@@ -89,7 +89,7 @@ class CKWifiKiller(object):
         else:
             if os.getuid() != 0:
                 Color.pl('{!} {R}error: {O}ck-wifikiller{R} must be run as {O}root{W}')
-                Configuration.exit_gracefully(0)
+                Configuration.exit_gracefully(1)
             Configuration.get_monitor_mode_interface()
             if self._session:
                 self._session.event('scan_and_attack', {
@@ -149,3 +149,8 @@ def entry_point():
         if app and getattr(app, '_session', None):
             logdir = app._session.finalize(code)
             Color.pl('{+} session log saved: {C}%s{W}' % logdir)
+    return code
+
+
+if __name__ == '__main__':
+    sys.exit(entry_point())

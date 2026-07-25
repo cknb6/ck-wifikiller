@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from ..config import Configuration
@@ -211,16 +211,25 @@ class CrackHelper:
 
         selection = []
         for choice in choices.split(','):
-            if '-' in choice:
-                first, last = [int(x) for x in choice.split('-')]
-                for index in range(first, last + 1):
-                    selection.append(handshakes[index-1])
-            elif choice.strip().lower() == 'all':
+            choice = choice.strip()
+            if not choice:
+                continue
+            if choice.lower() == 'all':
                 selection = handshakes[:]
                 break
-            elif [c.isdigit() for c in choice]:
+            if '-' in choice:
+                parts = choice.split('-')
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                    first, last = int(parts[0]), int(parts[1])
+                    first = max(1, first)
+                    last = min(len(handshakes), last)
+                    for index in range(first, last + 1):
+                        selection.append(handshakes[index - 1])
+                continue
+            if choice.isdigit():
                 index = int(choice)
-                selection.append(handshakes[index-1])
+                if 1 <= index <= len(handshakes):
+                    selection.append(handshakes[index - 1])
 
         return selection
 

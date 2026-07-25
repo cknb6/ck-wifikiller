@@ -1,3 +1,13 @@
+ck-wifikiller (2.5.0-1) unstable; urgency=medium
+
+  * Code audit fixes: BPF shell injection, bully stop(), vendor advisory.
+  * tshark filter quoting, non-tty stty size crash, hashcat -m 16800 removal.
+  * Modern Kali adaptation: shebang python3, Dockerfile Kali Rolling, NM systemctl.
+  * Frontier integration: hcxdumptool --exitoneapol efficient capture.
+  * crack.py selection bounds, kismet rest_get dedup, test_Handshake fix.
+
+ -- 传康Kk <1837620622@qq.com>  Sat, 25 Jul 2026 20:48:00 +0800
+
 ck-wifikiller (2.3.0-1) unstable; urgency=medium
 
   * Initial ck-wifikiller release (fork of wifite2 2.2.5).

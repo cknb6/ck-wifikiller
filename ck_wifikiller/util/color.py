@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import sys
@@ -74,9 +74,11 @@ class Color(object):
 
     @staticmethod
     def clear_entire_line():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        Color.p('\r' + (' ' * int(columns)) + '\r')
+        import shutil
+        # shutil.get_terminal_size 在非 tty（CI/管道/重定向）下回退到默认值，
+        # 避免 os.popen('stty size') 返回空导致 .split() 崩溃。
+        columns = shutil.get_terminal_size().columns
+        Color.p('\r' + (' ' * columns) + '\r')
 
 
     @staticmethod

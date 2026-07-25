@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from .util.color import Color
@@ -487,11 +487,16 @@ class Arguments(object):
             type=str,
             help=self._verbose('Extra args passed through to hashcat (advanced)'))
 
-        hc.add_argument('--cn',
+        cn_mode = hc.add_mutually_exclusive_group()
+        cn_mode.add_argument('--cn',
             action='store_true',
             dest='cn_optimize',
-            help=Color.s('China WiFi optimization: auto mask pipeline after wordlist '
-                         '(8/11-digit, phone, birthday)'))
+            help=Color.s('Force mainland-China audit profile (default: auto by IANA timezone)'))
+        cn_mode.add_argument('--no-cn',
+            action='store_false',
+            dest='cn_optimize',
+            help=Color.s('Disable mainland-China audit profile and timezone auto-detection'))
+        cn_mode.set_defaults(cn_optimize=None)
 
         hc.add_argument('--cn-mask-limit',
             action='store',
@@ -530,9 +535,9 @@ class Arguments(object):
             dest='recon_mode',
             metavar='[mode]',
             type=str,
-            choices=['status', 'kismet', 'bettercap', 'report'],
+            choices=['status', 'audit', 'kismet', 'bettercap', 'report'],
             help=Color.s(
-                'Layer-1 recon toolchain: {C}status{W}|{C}kismet{W}|{C}bettercap{W}|{C}report{W} '
+                'Recon/audit: {C}status{W}|{C}audit{W}|{C}kismet{W}|{C}bettercap{W}|{C}report{W} '
                 '(Kismet/bettercap/airodump matrix, Kali-ready)'))
 
 if __name__ == '__main__':
@@ -543,4 +548,3 @@ if __name__ == '__main__':
     args = a.args
     for (key,value) in sorted(args.__dict__.items()):
         Color.pl('{C}%s: {G}%s{W}' % (key.ljust(21),value))
-

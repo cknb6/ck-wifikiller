@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from ..util.color import Color
@@ -155,15 +155,14 @@ class Scanner(object):
 
     @staticmethod
     def get_terminal_height():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        return int(rows)
+        import shutil
+        # shutil.get_terminal_size 在非 tty 下回退默认值，避免 stty size 崩溃
+        return shutil.get_terminal_size().lines
 
     @staticmethod
     def get_terminal_width():
-        import os
-        (rows, columns) = os.popen('stty size', 'r').read().split()
-        return int(columns)
+        import shutil
+        return shutil.get_terminal_size().columns
 
     def select_targets(self):
         '''

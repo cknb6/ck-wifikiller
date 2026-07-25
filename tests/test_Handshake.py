@@ -19,13 +19,14 @@ class TestHandshake(unittest.TestCase):
         this_dir = os.path.dirname(this_file)
         return os.path.join(this_dir, 'files', filename)
 
+    @unittest.skipUnless(Process.exists('aircrack-ng'), 'aircrack-ng is missing')
     def testAnalyze(self):
         hs_file = self.getFile('handshake_exists.cap')
         hs = Handshake(hs_file, bssid='A4:2B:8C:16:6B:3A')
         try:
             hs.analyze()
-        except Exception:
-            fail()
+        except Exception as e:
+            self.fail("analyze() raised Exception: %s" % e)
 
     @unittest.skipUnless(Process.exists('tshark'), 'tshark is missing')
     def testHandshakeTshark(self):

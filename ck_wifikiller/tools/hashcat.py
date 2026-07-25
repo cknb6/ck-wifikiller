@@ -20,7 +20,9 @@ from ..util.color import Color
 
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import tempfile
 
 
@@ -43,8 +45,10 @@ class Hashcat(Dependency):
     def should_use_force() -> bool:
         command = ['hashcat', '-I']
         try:
-            stderr = Process(command).stderr() or ''
-            stdout = Process(command).stdout() or ''
+            process = Process(command)
+            stdout, stderr = process.get_output()
+            stdout = stdout or ''
+            stderr = stderr or ''
             blob = stderr + stdout
             return 'No devices found/left' in blob or 'No devices found' in blob
         except Exception:
@@ -61,21 +65,28 @@ class Hashcat(Dependency):
         return line.rsplit(':', 1)[-1].strip() or None
 
     @staticmethod
-    def _extra_attack_args() -> list[str]:
-        """根据 Configuration 构建 hashcat 附加参数（rules/mask/increment/透传）。"""
+    def _extra_attack_args(is_mask: bool = False) -> list[str]:
+        """按攻击模式构建 hashcat 附加参数，避免组合无效选项。"""
         extra: list[str] = []
         rules = getattr(Configuration, 'hashcat_rules', None)
-        if rules and os.path.isfile(rules):
+        if not is_mask and rules and os.path.isfile(rules):
             extra.extend(['-r', rules])
-        if getattr(Configuration, 'hashcat_increment', False):
+
+        # WPA/WPA2 口令最短 8 位；increment 只允许用于掩码模式 -a 3。
+        if is_mask and getattr(Configuration, 'hashcat_increment', False):
+            try:
+                increment_max = int(getattr(Configuration, 'hashcat_increment_max', 8))
+            except (TypeError, ValueError):
+                increment_max = 8
+            increment_max = max(8, increment_max)
             extra.append('--increment')
-            extra.extend(['--increment-min', '1'])
-            extra.extend(['--increment-max',
-                          str(getattr(Configuration, 'hashcat_increment_max', 8))])
+            extra.extend(['--increment-min', '8'])
+            extra.extend(['--increment-max', str(increment_max)])
+
         raw = getattr(Configuration, 'hashcat_extra_args', None)
         if raw:
             if isinstance(raw, str):
-                extra.extend(raw.split())
+                extra.extend(shlex.split(raw))
             else:
                 extra.extend([str(x) for x in raw])
         return extra
@@ -92,7 +103,6 @@ class Hashcat(Dependency):
             return None
 
         mask = getattr(Configuration, 'hashcat_mask', None)
-        attack_args = Hashcat._extra_attack_args()
 
         # 两阶段：先字典(-a 0)，再掩码(-a 3)（若提供 mask）
         phases: list[tuple[list[str], bool]] = []
@@ -110,8 +120,7 @@ class Hashcat(Dependency):
                     '--self-test-disable',
                 ]
                 command.extend(base)
-                if not is_mask:
-                    command.extend(attack_args)
+                command.extend(Hashcat._extra_attack_args(is_mask=is_mask))
                 if Hashcat.should_use_force():
                     command.append('--force')
                 command.extend(additional_arg)
@@ -137,6 +146,7 @@ class Hashcat(Dependency):
                 '-a', '3',
                 hash_file, mask,
             ]
+            command.extend(Hashcat._extra_attack_args(is_mask=True))
             if Hashcat.should_use_force():
                 command.append('--force')
             command.extend(additional_arg)
@@ -167,34 +177,15 @@ class Hashcat(Dependency):
     def crack_pmkid(pmkid_file: str, verbose: bool = False) -> str | None:
         """
         破解 PMKID/EAPOL 文本哈希。
-        支持: *.hc22000 / *.22000 / 旧 *.16800（会尝试自动转换或直接喂 22000）。
+        支持: *.hc22000 / *.22000 / 旧 *.16800（统一用 -m 22000 解析）。
+
+        hashcat 6.x 已移除 -m 16800；旧 16800 星号格式需用 hcxpcapngtool
+        从原始 pcapng 重新生成 .hc22000，这里不再尝试已废弃的模式。
         """
         path = pmkid_file
-        # 旧 16800 单行格式尽量仍用 22000 解析失败时提示
         if path.endswith('.16800'):
-            Color.pl('{!} {O}检测到废弃的 .16800 格式，建议用 hcxpcapngtool 转为 .hc22000{W}')
-            # hashcat 新版本可能拒绝 16800；仍尝试 22000 若内容已是 WPA*01*
-            try:
-                with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                    head = f.read(8)
-                if head.startswith('WPA*'):
-                    pass  # 已是 22000 文本
-                else:
-                    # 真·旧 16800 星号格式
-                    command_try = [
-                        'hashcat', '--quiet', '-m', '16800', '-a', '0',
-                        path, Configuration.wordlist or '/dev/null'
-                    ]
-                    if Configuration.wordlist:
-                        if Hashcat.should_use_force():
-                            command_try.append('--force')
-                        p = Process(command_try)
-                        p.wait()
-                        key = Hashcat._extract_key(p.stdout() or '')
-                        if key:
-                            return key
-            except OSError:
-                pass
+            Color.pl('{!} {O}检测到废弃的 .16800 格式，统一用 -m 22000 解析；'
+                     '若失败请用 hcxpcapngtool 从原始 pcapng 重新生成 .hc22000{W}')
         return Hashcat.crack_hc22000(path, verbose=verbose)
 
 
@@ -247,6 +238,10 @@ class HcxDumpTool(Dependency):
             ]
             if bpf_ok:
                 command.extend(['--bpf', bpf_path])
+            # 前沿高效捕获：收到 PMKID(1)+EAPOL M2(2)+M3(4) 任一即自动退出，
+            # 避免冗余采集（hcxdumptool v6.0+ 官方推荐用法）。
+            if '--exitoneapol' in help_out:
+                command.extend(['--exitoneapol', '7'])
             # 旧版兼容探测
             if '--filterlist' in help_out and not bpf_ok:
                 fl = Configuration.temp(f'pmkid-{bssid}.filterlist')
@@ -288,15 +283,16 @@ class HcxDumpTool(Dependency):
                     return True
             except OSError:
                 pass
-        # tcpdump 回退（需在 monitor 接口上；无 iface 时用文件语法）
+        # tcpdump 回退：参数数组执行 + Python 文件对象重定向，杜绝 shell 注入
         if shutil.which('tcpdump'):
-            # 使用 -y IEEE802_11_RADIO 生成可移植 BPF（不强制 -i）
-            cmd = (
-                f'tcpdump -s 1024 -y IEEE802_11_RADIO '
-                f'"{expr}" -ddd > {bpf_path}'
-            )
-            Process.call(cmd, shell=True)
             try:
+                with open(bpf_path, 'w', encoding='utf-8') as fh:
+                    subprocess.run(
+                        ['tcpdump', '-s', '1024', '-y', 'IEEE802_11_RADIO',
+                         expr, '-ddd'],
+                        stdout=fh, stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
                 return os.path.isfile(bpf_path) and os.path.getsize(bpf_path) > 4
             except OSError:
                 return False

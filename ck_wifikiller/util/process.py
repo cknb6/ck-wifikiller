@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""进程封装 — 默认禁止无必要 shell，降低注入风险。"""
+"""进程封装 — 统一使用参数数组执行，禁止 shell 注入。"""
 
 from __future__ import annotations
 
@@ -25,30 +25,28 @@ class Process(object):
     def call(command, cwd=None, shell=False):
         """
         执行命令。
-        - list: 永不 shell
-        - str 且 shell=False: shlex 拆分
-        - 显式 shell=True: 仅用于管道等（调用方负责安全）
+        - list/tuple: 直接作为参数数组
+        - str: 使用 shlex 拆分为参数数组
+        - shell=True: 明确拒绝，调用方必须改写为无 shell 形式
         """
+        if shell:
+            raise ValueError('shell=True is disabled; pass an argument list instead')
+
         if isinstance(command, (list, tuple)):
-            shell = False
             cmd = list(command)
+        elif isinstance(command, str):
+            cmd = shlex.split(command)
         else:
-            cmd = command
-            if not shell:
-                # 旧逻辑: 有空格就 shell=True —— 已修复为 shlex.split
-                if '|' in command or '>' in command or '<' in command or '&&' in command:
-                    shell = True
-                else:
-                    cmd = shlex.split(command)
-                    shell = False
+            raise TypeError('command must be a string, list, or tuple')
+
+        if not cmd:
+            raise ValueError('command must not be empty')
 
         if Configuration.verbose > 1:
-            disp = cmd if isinstance(cmd, str) else ' '.join(cmd)
-            Color.pe('\n {C}[?]{W} Executing%s: {B}%s{W}' % (
-                ' (shell)' if shell else '', disp))
+            disp = ' '.join(str(arg) for arg in cmd)
+            Color.pe('\n {C}[?]{W} Executing: {B}%s{W}' % disp)
 
-        pid = Popen(cmd, cwd=cwd, stdout=PIPE, stderr=PIPE, shell=shell)
-        pid.wait()
+        pid = Popen(cmd, cwd=cwd, stdout=PIPE, stderr=PIPE, shell=False)
         (stdout, stderr) = pid.communicate()
 
         if isinstance(stdout, bytes):
@@ -121,8 +119,6 @@ class Process(object):
             self.pid.stdin.flush()
 
     def get_output(self):
-        if self.pid.poll() is None:
-            self.pid.wait()
         if self.out is None:
             (self.out, self.err) = self.pid.communicate()
 
@@ -136,7 +132,8 @@ class Process(object):
         return self.pid.poll()
 
     def wait(self):
-        self.pid.wait()
+        self.get_output()
+        return self.pid.returncode
 
     def running_time(self):
         return int(time.time() - self.start_time)

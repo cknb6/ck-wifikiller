@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from ..util.color import Color
@@ -89,14 +89,20 @@ class Target(object):
         if self.channel == '-1':
             raise Exception('Ignoring target with Negative-One (-1) channel')
 
-        # Filter broadcast/multicast BSSIDs, see https://github.com/derv82/wifite2/issues/32
-        bssid_broadcast = re.compile(r'^(ff:ff:ff:ff:ff:ff|00:00:00:00:00:00)$', re.IGNORECASE)
-        if bssid_broadcast.match(self.bssid):
-            raise Exception('Ignoring target with Broadcast BSSID (%s)' % self.bssid)
+        # 扫描结果会进入文件名和外部工具参数，必须先验证完整 MAC 格式。
+        bssid_pattern = re.compile(
+            r'^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$',
+            re.IGNORECASE,
+        )
+        if not bssid_pattern.fullmatch(self.bssid):
+            raise ValueError('Ignoring target with Invalid BSSID (%s)' % self.bssid)
 
-        bssid_multicast = re.compile(r'^(01:00:5e|01:80:c2|33:33)', re.IGNORECASE)
-        if bssid_multicast.match(self.bssid):
-            raise Exception('Ignoring target with Multicast BSSID (%s)' % self.bssid)
+        if self.bssid.lower() in ('ff:ff:ff:ff:ff:ff', '00:00:00:00:00:00'):
+            raise ValueError('Ignoring target with Broadcast BSSID (%s)' % self.bssid)
+
+        # 首字节最低位为 1 即组播地址，覆盖所有组播前缀。
+        if int(self.bssid.split(':', 1)[0], 16) & 1:
+            raise ValueError('Ignoring target with Multicast BSSID (%s)' % self.bssid)
 
     def is_wpa3_sae(self) -> bool:
         '''是否纯 WPA3-SAE（无 PSK），离线爆破不可行，仅在线爆破(Wacker)。'''
@@ -187,4 +193,3 @@ if __name__ == '__main__':
     t.clients.append('asdf')
     t.clients.append('asdf')
     print(t.to_str())
-

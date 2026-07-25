@@ -1,134 +1,332 @@
-# tag 触发：在 Debian 容器构建 .deb 并自动发布 GitHub Release
-# 本地不构建；CI 内完成 dpkg-buildpackage
+# tag 触发：构建 Debian 包、发布签名 APT 仓库，再创建 GitHub Release
 name: Build and Release Deb
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build, for example v2.5.0
+        required: true
+        type: string
 
+# 默认只读；只有实际写入仓库的任务单独提升权限。
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-deb:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: debian:bookworm
     outputs:
-      version: ${{ steps.ver.outputs.tag }}
+      tag: ${{ steps.version.outputs.tag }}
+      upstream: ${{ steps.version.outputs.upstream }}
     steps:
-      - name: Install build deps
+      - name: Install build dependencies
         run: |
+          set -eu
           apt-get update
           apt-get install -y --no-install-recommends \
-            git build-essential debhelper dh-python python3-all python3-setuptools \
-            dpkg-dev
+            ca-certificates git build-essential debhelper dh-python \
+            python3-all python3-setuptools dpkg-dev lintian
 
-      - uses: actions/checkout@v4
+      - name: Validate release tag
+        id: version
+        env:
+          RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+~][0-9A-Za-z.+~]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_REF" >&2
+            echo "Expected vMAJOR.MINOR.PATCH, optionally followed by a Debian-safe +/~ suffix." >&2
+            exit 1
+          fi
+          upstream="${RELEASE_REF#v}"
+          dpkg --validate-version "$upstream"
+          echo "tag=$RELEASE_REF" >> "$GITHUB_OUTPUT"
+          echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
+
+      # 官方 Action 固定到完整提交，避免可变 tag 带来的供应链风险。
+      - name: Check out release tag
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          ref: ${{ steps.version.outputs.tag }}
+          persist-credentials: false
 
-      - name: Derive version from tag
-        id: ver
-        run: |
-          TAG="${GITHUB_REF##*/}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          # 去掉 v 前缀，作为 deb 上游版本
-          UPSTREAM="${TAG#v}"
-          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
-
-      - name: Sync debian/changelog with tag
+      - name: Synchronize Debian changelog
         env:
-          TAG: ${{ steps.ver.outputs.tag }}
-          UPSTREAM: ${{ steps.ver.outputs.upstream }}
+          TAG: ${{ steps.version.outputs.tag }}
+          UPSTREAM: ${{ steps.version.outputs.upstream }}
+        shell: bash
         run: |
-          set -e
-          DATE=$(date -R)
+          set -euo pipefail
+          release_date="$(git show -s --format=%cD "${TAG}^{commit}")"
           cat > debian/changelog <<EOF
-          ck-wifikiller (${UPSTREAM}-1) unstable; urgency=medium
+          ck-wifikiller (${UPSTREAM}) unstable; urgency=medium
 
             * Automated release for ${TAG}.
-            * PMKID hashcat rules/mask/increment; CN WiFi optimization; WPA3 transition detection.
-            * Router OUI vendor advisory; dynamic versioning; session logging.
 
-           -- ck-wifikiller <1837620622@qq.com>  ${DATE}
+           -- 传康Kk <1837620622@qq.com>  ${release_date}
           EOF
 
-      - name: Build .deb
+      - name: Build and validate Debian package
+        env:
+          CK_WIFI_VERSION: ${{ steps.version.outputs.tag }}
+        shell: bash
         run: |
-          chmod +x debian/rules
+          set -euo pipefail
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
           dpkg-buildpackage -us -uc -b
+
+          shopt -s nullglob
+          packages=(../ck-wifikiller_*.deb)
+          changes=(../ck-wifikiller_*.changes)
+          if (( ${#packages[@]} == 0 )); then
+            echo "dpkg-buildpackage completed without producing a .deb" >&2
+            exit 1
+          fi
+          if (( ${#changes[@]} == 0 )); then
+            echo "dpkg-buildpackage completed without producing a .changes file" >&2
+            exit 1
+          fi
+
+          lintian --fail-on error "${changes[@]}"
           mkdir -p artifacts
-          mv ../ck-wifikiller_*.deb artifacts/ || true
-          mv ../ck-wifikiller_*.build artifacts/ 2>/dev/null || true
-          ls -la artifacts/
+          mv -- "${packages[@]}" artifacts/
+          for package in artifacts/*.deb; do
+            dpkg-deb --info "$package" >/dev/null
+            dpkg-deb --contents "$package" >/dev/null
+          done
+          (
+            cd artifacts
+            sha256sum -- *.deb > SHA256SUMS
+          )
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ck-wifikiller-deb
-          path: artifacts/*.deb
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ steps.ver.outputs.tag }}
-          generate_release_notes: true
-          files: artifacts/*.deb
+          name: ck-wifikiller-deb-${{ steps.version.outputs.tag }}
+          path: |
+            artifacts/*.deb
+            artifacts/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
 
   apt-repo:
     needs: build-deb
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: ck-wifikiller-apt-repository
+      cancel-in-progress: false
+    steps:
+      - name: Check out APT repository branch
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: gh-pages
+          path: repo
+          fetch-depth: 0
+
+      - name: Download Debian artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: ck-wifikiller-deb-${{ needs.build-deb.outputs.tag }}
+          path: debs
+
+      - name: Install repository tools
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates dpkg-dev apt-utils gnupg
+
+      - name: Validate and import APT signing key
+        id: signing-key
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          GNUPGHOME: ${{ runner.temp }}/ck-wifikiller-gnupg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$APT_GPG_PRIVATE_KEY" ]]; then
+            echo "Required GitHub Secret APT_GPG_PRIVATE_KEY is not configured." >&2
+            exit 1
+          fi
+          if [[ -z "$APT_GPG_PASSPHRASE" ]]; then
+            echo "Required GitHub Secret APT_GPG_PASSPHRASE is not configured." >&2
+            exit 1
+          fi
+
+          install -d -m 0700 "$GNUPGHOME"
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+
+          secret_key_count="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" {count++} END {print count+0}')"
+          if [[ "$secret_key_count" != "1" ]]; then
+            echo "APT_GPG_PRIVATE_KEY must contain exactly one primary secret key." >&2
+            exit 1
+          fi
+          fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" {want=1; next} want && $1 == "fpr" {print $10; exit}')"
+          if [[ ! "$fingerprint" =~ ^[0-9A-Fa-f]{40,64}$ ]]; then
+            echo "Unable to derive a valid signing-key fingerprint." >&2
+            exit 1
+          fi
+
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+          gpg --batch --yes --export "$fingerprint" > repo/ck-wifikiller-archive-keyring.gpg
+          printf '%s\n' "$fingerprint" > repo/ck-wifikiller-archive-keyring.fingerprint
+
+      - name: Build signed APT repository
+        env:
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          EXPECTED_VERSION: ${{ needs.build-deb.outputs.upstream }}
+          GNUPGHOME: ${{ runner.temp }}/ck-wifikiller-gnupg
+          SIGNING_FINGERPRINT: ${{ steps.signing-key.outputs.fingerprint }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          (
+            cd debs
+            sha256sum -c SHA256SUMS
+          )
+
+          shopt -s nullglob
+          packages=(debs/*.deb)
+          if (( ${#packages[@]} == 0 )); then
+            echo "Downloaded artifact does not contain a .deb" >&2
+            exit 1
+          fi
+
+          pool_dir="repo/pool/main/c/ck-wifikiller"
+          mkdir -p "$pool_dir"
+          for package in "${packages[@]}"; do
+            package_name="$(dpkg-deb -f "$package" Package)"
+            package_version="$(dpkg-deb -f "$package" Version)"
+            package_arch="$(dpkg-deb -f "$package" Architecture)"
+            if [[ "$package_name" != "ck-wifikiller" || "$package_version" != "$EXPECTED_VERSION" || "$package_arch" != "all" ]]; then
+              echo "Unexpected package metadata in $package" >&2
+              exit 1
+            fi
+
+            destination="$pool_dir/$(basename "$package")"
+            if [[ -e "$destination" ]] && ! cmp -s "$package" "$destination"; then
+              echo "Refusing to replace an existing package with different content: $destination" >&2
+              exit 1
+            fi
+            cp -- "$package" "$destination"
+          done
+
+          for arch in amd64 arm64; do
+            index_dir="repo/dists/stable/main/binary-${arch}"
+            mkdir -p "$index_dir"
+            dpkg-scanpackages --arch all --multiversion repo/pool /dev/null > "$index_dir/Packages"
+            gzip -n -9 -c "$index_dir/Packages" > "$index_dir/Packages.gz"
+          done
+
+          cd repo/dists/stable
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=ck-wifikiller \
+            -o APT::FTPArchive::Release::Label=ck-wifikiller \
+            -o APT::FTPArchive::Release::Suite=stable \
+            -o APT::FTPArchive::Release::Codename=stable \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+            -o APT::FTPArchive::Release::Components=main \
+            -o APT::FTPArchive::Release::Description="ck-wifikiller signed APT repository" \
+            -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
+            release . > Release
+
+          for index in main/binary-amd64/Packages main/binary-amd64/Packages.gz \
+                       main/binary-arm64/Packages main/binary-arm64/Packages.gz; do
+            digest="$(sha256sum "$index" | awk '{print $1}')"
+            by_hash_dir="$(dirname "$index")/by-hash/SHA256"
+            mkdir -p "$by_hash_dir"
+            cp -- "$index" "$by_hash_dir/$digest"
+          done
+
+          rm -f InRelease Release.gpg
+          printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+            --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+            --clearsign --output InRelease Release
+          printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+            --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+            --armor --detach-sign --output Release.gpg Release
+
+          cd ../..
+          touch .nojekyll
+
+      - name: Verify APT metadata for supported architectures
+        shell: bash
+        run: |
+          set -euo pipefail
+          keyring="${GITHUB_WORKSPACE}/repo/ck-wifikiller-archive-keyring.gpg"
+          repository="${GITHUB_WORKSPACE}/repo"
+
+          for arch in amd64 arm64; do
+            apt_root="${RUNNER_TEMP}/apt-smoke-${arch}"
+            mkdir -p "$apt_root/etc" "$apt_root/lists/partial" "$apt_root/cache/archives/partial"
+            printf 'deb [arch=%s signed-by=%s] file:%s stable main\n' \
+              "$arch" "$keyring" "$repository" > "$apt_root/etc/sources.list"
+
+            apt_options=(
+              -o "APT::Architecture=${arch}"
+              -o "Dir::Etc::sourcelist=${apt_root}/etc/sources.list"
+              -o "Dir::Etc::sourceparts=-"
+              -o "Dir::State::lists=${apt_root}/lists"
+              -o "Dir::Cache::archives=${apt_root}/cache/archives"
+            )
+            sudo apt-get "${apt_options[@]}" update
+            apt-cache "${apt_options[@]}" show ck-wifikiller >/dev/null
+          done
+
+      - name: Commit signed APT repository
+        env:
+          TAG: ${{ needs.build-deb.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C repo config user.name "传康Kk"
+          git -C repo config user.email "1837620622@qq.com"
+          git -C repo add --all
+          if git -C repo diff --cached --quiet; then
+            echo "APT repository already contains $TAG; nothing to publish."
+            exit 0
+          fi
+          git -C repo commit -m "apt repo: publish ${TAG} [skip ci]"
+          git -C repo push origin gh-pages
+
+  publish-release:
+    needs:
+      - build-deb
+      - apt-repo
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Download .deb artifact
-        uses: actions/download-artifact@v4
+      - name: Download release artifact
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          name: ck-wifikiller-deb
-          path: debs
+          name: ck-wifikiller-deb-${{ needs.build-deb.outputs.tag }}
+          path: artifacts
 
-      - name: Install repo tools
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-deb.outputs.tag }}
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev apt-utils git
-
-      - name: Configure git
-        run: |
-          git config --global user.name "ck-wifikiller-ci"
-          git config --global user.email "1837620622@qq.com"
-
-      - name: Clone or init gh-pages
-        run: |
-          git clone --depth=1 --branch=gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} repo 2>/dev/null || \
-          mkdir -p repo && cd repo && git init && git checkout -b gh-pages
-          cd repo
-          # 清旧 pool 同名包，保留历史其它版本
-          rm -f pool/main/c/ck-wifikiller/*.deb 2>/dev/null || true
-          mkdir -p pool/main/c/ck-wifikiller dists/stable/main/binary-all
-
-      - name: Place .deb into pool
-        run: |
-          cp debs/*.deb repo/pool/main/c/ck-wifikiller/
-          ls -la repo/pool/main/c/ck-wifikiller/
-
-      - name: Generate Packages index
-        run: |
-          cd repo
-          dpkg-scanpackages --arch all pool /dev/null > dists/stable/main/binary-all/Packages
-          gzip -kf dists/stable/main/binary-all/Packages
-
-      - name: Generate Release file
-        run: |
-          cd repo/dists/stable
-          apt-ftparchive release . > Release
-          cat Release
-
-      - name: Commit and push gh-pages
-        run: |
-          cd repo
-          git add -A
-          git commit -m "apt repo: publish ${{ needs.build-deb.outputs.version }} [skip ci]" || \
-            git commit --allow-empty -m "apt repo: publish ${{ needs.build-deb.outputs.version }} [skip ci]"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} gh-pages
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/*.deb artifacts/SHA256SUMS \
+              --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" artifacts/*.deb artifacts/SHA256SUMS \
+              --verify-tag --generate-notes --title "$TAG" \
+              --repo "$GITHUB_REPOSITORY"
+          fi

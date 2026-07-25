@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
@@ -85,15 +85,17 @@ class Configuration(object):
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
         cls.pmkid_timeout = 30  # Time to wait for PMKID capture
 
-        # hashcat 爆破增强（2026 前沿：rules + 掩码 + 增量）
+        # hashcat 离线口令审计（rules + 掩码 + 增量）
         cls.hashcat_rules = None       # 规则文件路径，如 /usr/share/hashcat/rules/best64.rule
         cls.hashcat_mask = None        # 自定义掩码，如 ?d?d?d?d?d?d?d?d（8 位纯数字）
-        cls.hashcat_increment = False  # 增量爆破（短密码优先，1-8 位）
+        cls.hashcat_increment = False  # 掩码阶段增量，WPA 口令最短 8 位
         cls.hashcat_increment_max = 8  # 增量最大长度
         cls.hashcat_extra_args = None  # 透传额外 hashcat 参数（高级用户）
 
-        # 国内 WiFi 智能优化（基于公开统计：8/11 位纯数字、手机号、生日占比高）
-        cls.cn_optimize = False        # 字典失败后自动追加国内常用掩码管线
+        # 中国大陆审计配置：CLI 未指定时只按明确 IANA 时区自动启用
+        cls.cn_optimize = False        # 字典失败后追加经授权的弱口令掩码核查
+        cls.cn_auto_detected = False
+        cls.cn_region_source = 'unresolved'
         cls.cn_mask_limit = 4          # 自动掩码阶段数量（控制耗时）
 
         # 自动更新检测（启动时查 GitHub 最新 Release，仅提示不自动安装）
@@ -135,7 +137,7 @@ class Configuration(object):
         cls.show_cracked = False
         cls.check_handshake = None
         cls.crack_handshake = False
-        cls.recon_mode = None  # status|kismet|bettercap|report
+        cls.recon_mode = None  # status|audit|kismet|bettercap|report
 
         # Overwrite config values with arguments (if defined)
         cls.load_from_arguments()
@@ -439,20 +441,25 @@ class Configuration(object):
             Color.pl('{+} {C}option:{W} hashcat incremental mode {G}enabled{W}')
 
         if getattr(args, 'hashcat_increment_max', None):
-            cls.hashcat_increment_max = args.hashcat_increment_max
+            cls.hashcat_increment_max = max(8, min(63, args.hashcat_increment_max))
             Color.pl('{+} {C}option:{W} hashcat increment max length {G}%d{W}'
-                     % args.hashcat_increment_max)
+                     % cls.hashcat_increment_max)
 
         if getattr(args, 'hashcat_extra_args', None):
             cls.hashcat_extra_args = args.hashcat_extra_args
             Color.pl('{+} {C}option:{W} hashcat extra args: {G}%s{W}' % args.hashcat_extra_args)
 
-        if getattr(args, 'cn_optimize', False):
-            cls.cn_optimize = True
-            Color.pl('{+} {C}option:{W} {G}国内 WiFi 智能优化 / CN optimization{W} enabled')
+        from .util.region import resolve_cn_mode
+        cn_arg = getattr(args, 'cn_optimize', None)
+        cls.cn_optimize, cls.cn_region_source = resolve_cn_mode(cn_arg)
+        cls.cn_auto_detected = cn_arg is None and cls.cn_optimize
+        if cls.cn_optimize:
+            mode = 'auto' if cls.cn_auto_detected else 'explicit'
+            Color.pl('{+} {C}option:{W} {G}中国大陆审计配置 / CN profile{W} '
+                     'enabled ({D}%s, %s{W})' % (mode, cls.cn_region_source))
 
         if getattr(args, 'cn_mask_limit', None):
-            cls.cn_mask_limit = args.cn_mask_limit
+            cls.cn_mask_limit = max(1, min(8, args.cn_mask_limit))
             Color.pl('{+} {C}option:{W} CN mask stages: {G}%d{W}' % args.cn_mask_limit)
 
     @classmethod
@@ -546,7 +553,7 @@ class Configuration(object):
             #Airmon.put_interface_up(Airmon.base_interface)
 
         if Airmon.killed_network_manager:
-            Color.pl('{!} You can restart NetworkManager when finished ({C}service network-manager start{W})')
+            Color.pl('{!} You can restart NetworkManager when finished ({C}sudo systemctl start NetworkManager{W})')
             #Airmon.start_network_manager()
 
         exit(code)

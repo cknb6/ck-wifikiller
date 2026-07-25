@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from .dependency import Dependency
@@ -374,8 +374,7 @@ class Aireplay(Thread, Dependency):
             Configuration.interface
         ]
 
-        cmd = '"%s"' % '" "'.join(cmd)
-        (out, err) = Process.call(cmd, cwd=Configuration.temp(), shell=True)
+        (out, err) = Process.call(cmd, cwd=Configuration.temp())
         if out.strip() == 'Wrote packet to: %s' % forged_file:
             return forged_file
         else:
@@ -449,4 +448,3 @@ if __name__ == '__main__':
 
     t = WEPAttackType(t)
     print(t.name, type(t.name), t.value)
-

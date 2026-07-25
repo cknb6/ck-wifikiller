@@ -107,7 +107,8 @@ class AttackPMKID(Attack):
             self.success = False
             return False
 
-        return True  # 抓到哈希即视为攻击流程成功
+        # 只有破解成功才停止后续攻击；仅抓到哈希时继续尝试 WPA 握手路径。
+        return self.success
 
     def capture_pmkid(self):
         self.keep_capturing = True

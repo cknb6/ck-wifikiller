@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from .dependency import Dependency
@@ -351,8 +351,9 @@ class Bully(Attack, Dependency):
 
 
     def stop(self):
-        if hasattr(self, 'pid') and self.pid and self.pid.poll() is None:
-            self.pid.interrupt()
+        # 进程句柄存于 self.bully_proc（旧代码误查 self.pid，导致永远无法停止）
+        if hasattr(self, 'bully_proc') and self.bully_proc and self.bully_proc.poll() is None:
+            self.bully_proc.interrupt()
 
 
     def __del__(self):

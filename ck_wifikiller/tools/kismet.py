@@ -89,9 +89,7 @@ class Kismet(Dependency):
             'devices_sample': [],
             'note': '',
         }
-        sysinfo = cls.rest_get('/system/status.json', base=base) or cls.rest_get(
-            '/system/status.json', base=base
-        )
+        sysinfo = cls.rest_get('/system/status.json', base=base)
         # 不同版本路径可能变化
         if sysinfo is None:
             sysinfo = cls.rest_get('/api/v1/system/status', base=base)

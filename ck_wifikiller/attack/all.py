@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from .wep import AttackWEP
@@ -126,10 +126,11 @@ class AttackAll(object):
         paths = adv.get('recommended_paths')
         if paths:
             Color.pl('{+} {O}推荐攻击路径 / Recommended{W}: {C}%s{W}' % ' → '.join(paths))
-        cves = adv.get('historical_cves')
-        if cves:
-            for cve in cves[:2]:
-                Color.pl('{!} {D}%s{W}' % cve)
+        checks = adv.get('audit_checks')
+        if checks:
+            Color.pl('{+} {D}防御核查清单 / Audit checks{W}:')
+            for check in checks[:3]:
+                Color.pl('{+}   {D}%s{W}' % check)
 
     @staticmethod
     def print_wpa3_advisory(target):

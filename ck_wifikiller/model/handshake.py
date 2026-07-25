@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from ..util.process import Process
@@ -118,8 +118,17 @@ class Handshake(object):
         if not self.bssid:
             return []  # Aircrack requires BSSID
 
-        command = 'echo "" | aircrack-ng -a 2 -w - -b %s "%s"' % (self.bssid, self.capfile)
-        (stdout, stderr) = Process.call(command)
+        # 通过 stdin 提供空字典项，所有外部输入均保持为独立 argv，禁止 shell 拼接。
+        command = [
+            'aircrack-ng',
+            '-a', '2',
+            '-w', '-',
+            '-b', self.bssid,
+            self.capfile,
+        ]
+        process = Process(command)
+        process.stdin('\n')
+        (stdout, stderr) = process.get_output()
 
         if 'passphrase not in dictionary' in stdout.lower():
             return [(self.bssid, None)]
