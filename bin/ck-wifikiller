@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from ck_wifikiller import __main__
+__main__.entry_point()

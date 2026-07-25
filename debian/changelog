@@ -1,0 +1,8 @@
+ck-wifikiller (2.3.0-1) unstable; urgency=medium
+
+  * Initial ck-wifikiller release (fork of wifite2 2.2.5).
+  * Kali-compatible: hcxpcapngtool, hashcat -m 22000, modern hcxdumptool BPF.
+  * Enhanced default WPA wordlist; recon layer (Kismet/bettercap).
+  * Startup splash with project links and contact.
+
+ -- 传康Kk <1837620622@qq.com>  Sat, 25 Jul 2026 20:00:00 +0800

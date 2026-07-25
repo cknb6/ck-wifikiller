@@ -1,0 +1,16 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: ck-wifikiller
+Source: https://github.com/cknb6/ck-wifikiller
+
+Files: *
+Copyright: 2018- derv82 and wifite2 contributors
+           2026 传康Kk / ck-wifikiller contributors
+License: GPL-2.0-only
+
+License: GPL-2.0-only
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; version 2.
+ .
+ This package is based on wifite2 (https://github.com/derv82/wifite2).
+ See /usr/share/common-licenses/GPL-2

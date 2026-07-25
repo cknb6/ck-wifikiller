@@ -8,7 +8,7 @@ from .tools.macchanger import Macchanger
 
 class Configuration(object):
     ''' Stores configuration variables and functions for Wifite. '''
-    version = '2.2.5'
+    version = '2.3.0-ck'  # ck-wifikiller: Kali 2024–2026 + recon layer
 
     initialized = False # Flag indicating config has been initialized
     temp_dir = None     # Temporary directory
@@ -83,17 +83,20 @@ class Configuration(object):
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
         cls.pmkid_timeout = 30  # Time to wait for PMKID capture
 
-        # Default dictionary for cracking
+        # Default dictionary for cracking（优先 ck 增强词典）
         cls.cracked_file = 'cracked.txt'
         cls.wordlist = None
+        _root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         wordlists = [
-            './wordlist-top4800-probable.txt',  # Local file (ran from cloned repo)
-            '/usr/share/dict/wordlist-top4800-probable.txt',  # setup.py with prefix=/usr
-            '/usr/local/share/dict/wordlist-top4800-probable.txt',  # setup.py with prefix=/usr/local
-            # Other passwords found on Kali
-            '/usr/share/wfuzz/wordlist/fuzzdb/wordlists-user-passwd/passwds/phpbb.txt',
-            '/usr/share/fuzzdb/wordlists-user-passwd/passwds/phpbb.txt',
-            '/usr/share/wordlists/fern-wifi/common.txt'
+            os.path.join(_root, 'wordlists', 'ck-default-wpa.txt'),
+            './wordlists/ck-default-wpa.txt',
+            './wordlists/wpa-top4800.txt',
+            './wordlist-top4800-probable.txt',
+            '/usr/share/ck-wifikiller/wordlists/ck-default-wpa.txt',
+            '/usr/local/share/ck-wifikiller/wordlists/ck-default-wpa.txt',
+            '/usr/share/dict/wordlist-top4800-probable.txt',
+            '/usr/local/share/dict/wordlist-top4800-probable.txt',
+            '/usr/share/wordlists/fern-wifi/common.txt',
         ]
         for wlist in wordlists:
             if os.path.exists(wlist):
@@ -116,6 +119,7 @@ class Configuration(object):
         cls.show_cracked = False
         cls.check_handshake = None
         cls.crack_handshake = False
+        cls.recon_mode = None  # status|kismet|bettercap|report
 
         # Overwrite config values with arguments (if defined)
         cls.load_from_arguments()
@@ -161,6 +165,8 @@ class Configuration(object):
         if args.cracked:         cls.show_cracked = True
         if args.check_handshake: cls.check_handshake = args.check_handshake
         if args.crack_handshake: cls.crack_handshake = True
+        if getattr(args, 'recon_mode', None):
+            cls.recon_mode = args.recon_mode
 
 
     @classmethod

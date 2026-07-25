@@ -187,8 +187,8 @@ class AttackWPA(Attack):
         else:
             essid_safe = '[a-zA-Z0-9]+'
         bssid_safe = re.escape(bssid.replace(':', '-'))
-        date = '\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}'
-        get_filename = re.compile('handshake_%s_%s_%s\.cap' % (essid_safe, bssid_safe, date))
+        date = r'\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}'
+        get_filename = re.compile(r'handshake_%s_%s_%s\.cap' % (essid_safe, bssid_safe, date))
 
         for filename in os.listdir(Configuration.wpa_handshake_dir):
             cap_filename = os.path.join(Configuration.wpa_handshake_dir, filename)

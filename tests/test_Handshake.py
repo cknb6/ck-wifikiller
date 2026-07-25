@@ -4,8 +4,8 @@
 import sys
 sys.path.insert(0, '..')
 
-from wifite.model.handshake import Handshake
-from wifite.util.process import Process
+from ck_wifikiller.model.handshake import Handshake
+from ck_wifikiller.util.process import Process
 
 import unittest
 

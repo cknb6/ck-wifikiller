@@ -1,2 +1,8 @@
 include README.md
-include wordlist-top4800-probable.txt
+include LICENSE
+include PMKID.md
+include docs/*
+include wordlists/ck-default-wpa.txt
+include wordlists/wpa-top4800.txt
+include bin/ck-wifikiller
+recursive-include ck_wifikiller *.py

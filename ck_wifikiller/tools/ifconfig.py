@@ -18,7 +18,7 @@ class Ifconfig(Dependency):
         command = ['ifconfig', interface]
         if type(args) is list:
             command.extend(args)
-        elif type(args) is 'str':
+        elif isinstance(args, str):
             command.append(args)
         command.append('up')
 

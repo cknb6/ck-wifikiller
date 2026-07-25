@@ -468,6 +468,16 @@ class Arguments(object):
             dest='crack_handshake',
             help=Color.s('Show commands to crack a captured handshake'))
 
+        commands.add_argument('--recon',
+            action='store',
+            dest='recon_mode',
+            metavar='[mode]',
+            type=str,
+            choices=['status', 'kismet', 'bettercap', 'report'],
+            help=Color.s(
+                'Layer-1 recon toolchain: {C}status{W}|{C}kismet{W}|{C}bettercap{W}|{C}report{W} '
+                '(Kismet/bettercap/airodump matrix, Kali-ready)'))
+
 if __name__ == '__main__':
     from .util.color import Color
     from .config import Configuration

@@ -23,6 +23,7 @@ class Dependency(object):
     @classmethod
     def run_dependency_check(cls):
         from ..util.color import Color
+        from ..util.process import Process
 
         from .airmon import Airmon
         from .airodump import Airodump
@@ -37,26 +38,34 @@ class Dependency(object):
         from .tshark import Tshark
         from .macchanger import Macchanger
         from .hashcat import Hashcat, HcxDumpTool, HcxPcapTool
+        from .kismet import Kismet
+        from .bettercap_wifi import BettercapWifi
 
         apps = [
                 # Aircrack
-                Aircrack, #Airodump, Airmon, Aireplay,
+                Aircrack,
                 # wireless/net tools
                 Iwconfig, Ifconfig,
                 # WPS
                 Reaver, Bully,
-                # Cracking/handshakes
-                Pyrit, Tshark,
-                # Hashcat
+                # Cracking/handshakes — pyrit 已基本从 Kali 消失，降级为可选检测
+                Tshark,
+                # Hashcat + modern hcx (Kali 2024+)
                 Hashcat, HcxDumpTool, HcxPcapTool,
+                # Layer-1 recon (optional)
+                Kismet, BettercapWifi,
                 # Misc
                 Macchanger
             ]
+        # pyrit 仅在存在时检查，避免 Kali 新版本误杀
+        if Process.exists('pyrit'):
+            apps.insert(-3, Pyrit)
 
         missing_required = any([app.fails_dependency_check() for app in apps])
 
         if missing_required:
-            Color.pl('{!} {O}At least 1 Required app is missing. Wifite needs Required apps to run{W}')
+            Color.pl('{!} {O}At least 1 Required app is missing. ck-wifikiller needs Required apps{W}')
+            Color.pl('{!} {O}Kali: sudo apt install aircrack-ng hashcat hcxtools hcxdumptool tshark{W}')
             import sys
             sys.exit(-1)
 

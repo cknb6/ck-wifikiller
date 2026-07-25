@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from wifite.tools.airodump import Airodump
+from ck_wifikiller.tools.airodump import Airodump
 
 import unittest
 

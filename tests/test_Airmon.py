@@ -4,7 +4,7 @@
 import sys
 sys.path.insert(0, '..')
 
-from wifite.tools.airmon import Airmon
+from ck_wifikiller.tools.airmon import Airmon
 
 import unittest
 
