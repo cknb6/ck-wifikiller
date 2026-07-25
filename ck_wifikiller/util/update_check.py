@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import urllib.request
 from typing import Optional, Tuple
@@ -106,5 +105,5 @@ def run_update_check(current_version: str, enabled: bool = True) -> None:
 
 if __name__ == '__main__':
     # 自检：与本地版本比较
-    from _version import get_version
+    from ._version import get_version
     run_update_check(get_version())

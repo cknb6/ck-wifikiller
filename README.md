@@ -37,22 +37,44 @@ Email:   2040168455@qq.com
 - **国内 WiFi 智能优化 `--cn`**: 字典失败后自动按国内密码规律跑掩码管线（8 位纯数字、11 位手机号、生日、运营商光猫规律），基于公开统计调研。
 - **路由器厂商识别 + 漏洞咨询**: OUI 前缀识别厂商，打印默认凭据/CVE/推荐攻击路径，辅助自动化排序。
 - **WPA3 Transition Mode 检测**: 识别 SAE+PSK 降级可行性（Dragonblood），纯 SAE 提示在线爆破。
+- **自动更新检测**: 启动时查 GitHub 最新 Release，有新版提示升级命令（非阻塞，`--no-update` 可关）。
 - **动态版本**: 从 `CK_WIFI_VERSION` 环境变量或 `git describe` 读取，不硬编码。
 - **自动会话日志**: Kali 运行自动记录环境、事件、feedback 模板。
-- **GitHub Actions 自动发布**: 打 tag 触发 CI 构建 `.deb` 并发布 Release，本地不构建。
+- **GitHub Actions 自动发布**: 打 tag 触发 CI 构建 `.deb` → 发布 Release → 自动发布 apt 仓库到 GitHub Pages，`apt install` 直装。
 
 ---
 
 ## Install (Kali) / 安装
 
+### 方式 1：apt 仓库（推荐，自动更新） / apt repository (recommended)
+
 ```bash
+# 添加 ck-wifikiller apt 仓库 / Add apt repo
+# 仓库地址由 GitHub Actions 自动构建并发布到 GitHub Pages
+# Repo is auto-built by GitHub Actions and published to GitHub Pages
+echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
+  | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
 sudo apt update
+sudo apt install -y ck-wifikiller
+
+# 升级 / Upgrade
+sudo apt update && sudo apt install --only-upgrade ck-wifikiller
+```
+
+> 依赖（aircrack-ng/hashcat/hcxtools/hcxdumptool/tshark）由 deb 自动拉取。
+> Deps (aircrack-ng/hashcat/hcxtools/hcxdumptool/tshark) are auto-pulled by the deb.
+
+### 方式 2：Release .deb 手动安装 / Manual .deb from Release
+
+```bash
+# 从 GitHub Releases 下载 / Download from GitHub Releases
 sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark
-
-# from Release .deb / 从 Release 安装
 sudo apt install ./ck-wifikiller_*.deb
+```
 
-# or from source / 或从源码
+### 方式 3：源码 / From source
+
+```bash
 git clone https://github.com/cknb6/ck-wifikiller.git
 cd ck-wifikiller && sudo pip3 install -e .
 ```
@@ -72,7 +94,11 @@ sudo ck-wifikiller --cn                     # 国内 WiFi 智能优化（掩码�
 sudo ck-wifikiller --rules /usr/share/hashcat/rules/best64.rule
 sudo ck-wifikiller --mask '?d?d?d?d?d?d?d?d'   # 8 位纯数字掩码
 sudo ck-wifikiller --increment --increment-max 8
+sudo ck-wifikiller --no-update                 # 关闭启动更新检测
 ```
+
+> 启动时自动检测 GitHub 最新版本并提示升级（离线/超时静默跳过）。
+> Startup auto-checks latest GitHub release and hints upgrade (silent on offline/timeout).
 
 ---
 
@@ -88,12 +114,17 @@ See [docs/TOOLCHAIN-2026.md](docs/TOOLCHAIN-2026.md).
 
 ## Release / 发布
 
-Tag-triggered CI build (`.github/workflows/build-deb.yml`):
+Tag-triggered CI pipeline (`.github/workflows/build-deb.yml`):
+
+1. **build-deb**: Debian 容器内 `dpkg-buildpackage` 构建 `.deb` → 上传产物 → 创建 GitHub Release
+2. **apt-repo**: 下载 `.deb` → `dpkg-scanpackages` + `apt-ftparchive` 生成 Debian 仓库结构 → 推送到 `gh-pages` 分支（GitHub Pages 提供 apt 源）
 
 ```bash
-git tag v2.4.0 && git push origin v2.4.0
-# → GitHub Actions 在 Debian 容器构建 .deb 并自动发布 Release
+git tag v2.5.0 && git push origin v2.5.0
+# → CI 构建 .deb + 发布 Release + 更新 apt 仓库（apt install 即可装到新版）
 ```
+
+本地不构建 `.deb`，全部由 CI 完成。 / No local .deb build; all done in CI.
 
 ---
 

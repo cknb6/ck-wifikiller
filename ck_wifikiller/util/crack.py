@@ -88,10 +88,12 @@ class CrackHelper:
                 tool_name = 'aircrack'
 
         try:
+            hashcat_missing = any(t == 'hashcat' for t, _ in missing_tools)
             for hs in hs_to_crack:
                 if tool_name != 'hashcat' and hs['type'] == 'PMKID':
-                    if 'hashcat' in missing_tools:
+                    if hashcat_missing:
                         Color.pl('{!} {O}Hashcat is missing, therefore we cannot crack PMKID hash{W}')
+                        continue
                 cls.crack(hs, tool_name)
         except KeyboardInterrupt:
             Color.pl('\n{!} {O}Interrupted{W}')
