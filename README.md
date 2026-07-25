@@ -1,242 +1,278 @@
-<div align="center">
+# ck-wifikiller
 
-# ⚡ ck-wifikiller
+Modern Kali wireless auditor — maintained fork of [derv82/wifite2](https://github.com/derv82/wifite2)
 
-### Modern Kali Wireless Auditor · 现代化 Kali 无线审计工具
+**hashcat `-m 22000` · PMKID · hcxpcapngtool · Kismet recon · CN audit profile**
 
-**wifite2 的 2026 维护分支** · hashcat `-m 22000` · PMKID · Kismet recon · CN optimize
+Authorized security testing only. 仅限授权安全测试。
 
-`Authorized security testing only · 仅限授权安全测试`
-
-[![Kali](https://img.shields.io/badge/Kali-2026%20Rolling-1793D1?logo=kalilinux&logoColor=white)](https://www.kali.org/)
+[![Kali](https://img.shields.io/badge/Kali-Rolling-1793D1?logo=kalilinux&logoColor=white)](https://www.kali.org/)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![hashcat](https://img.shields.io/badge/hashcat--m%2022000-49A942?logo=hashicorp&logoColor=white)](https://hashcat.net/)
+[![hashcat](https://img.shields.io/badge/hashcat-m%2022000-49A942)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.1-2.5.1-success)](https://github.com/cknb6/ck-wifikiller/releases)
-
-</div>
-
----
-
-## 📖 项目简介 / Overview
-
-`ck-wifikiller` 是 [derv82/wifite2](https://github.com/derv82/wifite2)（上游止于 ~2018）的**现代化维护分支**，专为 **2024–2026 Kali Linux** 工具链重新适配与增强。它不是重写 Kismet/hashcat，而是做**工具链编排壳**——调用 Kali 上仍在维护的专业工具，并补齐上游缺失的：PMKID 无客户端攻击、hashcat 22000、BPF 过滤、Layer-1 侦察、国内 WiFi 智能优化、厂商指纹、WPA3 检测、自动更新。
-
-> ⚠️ **合规声明**：仅限在**已获授权**的网络上进行安全评估。未授权拦截/攻击无线网络可能违法，使用者自行承担法律责任。
-> Authorized wireless security assessment only. Unauthorized interception/attacks may be illegal.
+[![Release](https://img.shields.io/badge/Release-v2.5.1-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Version:  动态读取 (CK_WIFI_VERSION env / git describe)      │
-│  GitHub:   https://github.com/cknb6/ck-wifikiller            │
-│  Author:   传康Kk（万能程序员）                                │
-│  WeChat:   1837620622  （赞助备注「wifi赞助」/ 商务「商务合作」） │
-│  Email:    2040168455@qq.com                                 │
-└─────────────────────────────────────────────────────────────┘
+GitHub:  https://github.com/cknb6/ck-wifikiller
+Version: CK_WIFI_VERSION env > git describe > 2.5.1-ck
+Author:  传康Kk（万能程序员）
+WeChat:  1837620622  (赞助备注「wifi赞助」/ 商务「商务合作」)
+Email:   2040168455@qq.com
+License: GNU GPL v2 (same as wifite2)
 ```
 
 ---
 
-## 🆚 为何 fork？上游 vs 本分支 / Why this fork?
+## Compliance / 合规
 
-| 2018 wifite2 (上游) | ck-wifikiller (2026 Kali) | 说明 |
-|:--------------------|:--------------------------|:-----|
-| `hcxpcaptool` | **`hcxpcapngtool`** | 旧名已废弃，统一现代工具 |
-| hashcat `-m 2500` / `16800` | **`-m 22000`** (PMKID+EAPOL) | hashcat 6.x 唯一推荐模式 |
-| hcxdumptool `--filterlist` | **BPF `--bpf=`** (+ legacy fallback) | v6.3+ 软编码列表已移除 |
-| — | **`--exitoneapol=7`** 高效捕获 | 收到 PMKID/EAPOL 自动退出（前沿） |
-| small top4800 wordlist | **ck-default-wpa** (~25万高优先级) | 内置增强词典 |
-| no recon layer | **`--recon`** → Kismet / bettercap matrix | Layer-1 侦察编排 |
-| single dictionary crack | **rules + mask + increment + CN optimize** | 多阶段爆破 |
-| no vendor intel | **OUI 厂商识别 + 攻击路径推荐** | 被动指纹辅助排序 |
-| no WPA3 awareness | **WPA3 Transition Mode 检测** | Dragonblood 降级提示 |
-| hardcoded version | **动态版本** (env / git describe) | 不硬编码 |
-| no update check | **启动自动检测 GitHub Release** | 非阻塞，`--no-update` 可关 |
+Only use this tool on networks you own or are explicitly authorized to assess.
+Unauthorized interception or attacks against wireless networks may be illegal.
+You are solely responsible for how you use this software.
+
+仅限在**已获授权**的网络上进行安全评估。未授权拦截/攻击无线网络可能违法，使用者自行承担法律责任。
 
 ---
 
-## ✨ 2026 前沿功能 / Features
+## Overview / 简介
 
-### 🔓 破解增强 (Crack L3)
-- **PMKID hashcat 增强**：`--rules` / `--mask` / `--increment` / `--hc-args` 透传，两阶段字典+掩码爆破
-- **`--exitoneapol=7`**：hcxdumptool 收到 PMKID(1)+EAPOL M2(2)+M3(4) 任一即自动退出，避免冗余采集（hcxdumptool v6.0+ 官方推荐）
-- **统一 `-m 22000`**：彻底移除 hashcat 6.x 已删除的 `-m 16800`，旧 `.16800` 文件自动提示用 hcxpcapngtool 重新生成
+`ck-wifikiller` is a **modern maintenance fork** of wifite2 (upstream largely stalled around 2018), adapted for **current Kali Linux** toolchains (2024–2026).
 
-### 🇨🇳 国内 WiFi 智能优化 `--cn`
-- 字典失败后自动按国内密码规律跑掩码管线（8 位纯数字、11 位手机号、生日、运营商光猫规律）
-- **时区自动判断**：依据明确 IANA 时区（`Asia/Shanghai` 等）自动启用，不误判新加坡/马来西亚；`--cn`/`--no-cn`/`CK_WIFI_REGION` 可覆盖
-- 有界测试模板，不生成针对特定设备的默认凭据
+It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestration shell**: it drives maintained Kali tools and fixes upstream gaps that break on modern packages.
 
-### 🏷️ 路由器厂商识别 + 攻击路径推荐
-- OUI 前缀识别厂商（TP-Link/小米/华为/中兴/烽火/H3C/锐捷等），系统 ieee-data 优先 + 内置 fallback
-- 打印**推荐攻击路径**（运营商网关优先 WPS Pixie-Dust，家用优先 PMKID）+ 防御核查清单
-- 保守指纹：OUI/SSID 冲突时不强行推断，不声称漏洞状态
-
-### 🛡️ WPA3 前沿检测
-- **Transition Mode (SAE+PSK)**：识别降级可行性（Dragonblood），提示 hostapd-mana 伪 AP + deauth → WPA2 握手
-- **纯 SAE**：提示离线爆破不可行，仅在线爆破（Wacker）
-
-### 🔄 自动化与运维
-- **自动更新检测**：启动时查 GitHub 最新 Release，有新版提示升级命令（非阻塞，3s 超时静默跳过）
-- **动态版本**：`CK_WIFI_VERSION` 环境变量 > `git describe` > 内置基线
-- **自动会话日志**：Kali 运行自动记录环境/事件/feedback 模板到 `~/.ck-wifikiller/logs/`
-- **GitHub Actions 自动发布**：打 tag → CI 构建 `.deb` → Release → apt 仓库（GitHub Pages），`apt install` 直装
+| Gap in 2018 wifite2 | What this fork does |
+|---------------------|---------------------|
+| `hcxpcaptool` (removed/renamed) | Uses `hcxpcapngtool` |
+| hashcat `-m 2500` / `-m 16800` | Unified **`-m 22000`** (PMKID + EAPOL) |
+| hcxdumptool `--filterlist` | **BPF** (`--bpf`) with legacy fallback |
+| Small top4800 wordlist only | Bundled `ck-default-wpa.txt` (~253k lines) |
+| No recon layer | `--recon` → Kismet / bettercap / status matrix |
+| Single dictionary crack | rules / mask / increment + optional CN profile |
+| No vendor context | OUI fingerprint + defensive audit checklist |
+| No WPA3 awareness | Detect SAE / Transition Mode and warn |
+| Hardcoded version | Dynamic version (env / git describe) |
+| No update check | Optional non-blocking GitHub Release check |
 
 ---
 
-## 📥 安装 / Install (Kali)
+## Features / 功能
 
-### 方式 1：apt 仓库（推荐，自动更新） / apt repository
+### Capture and crack
 
-仓库由 GitHub Actions 自动构建并签名发布到 GitHub Pages：
+- PMKID path via `hcxdumptool` → `hcxpcapngtool` → hashcat `-m 22000`
+- When supported, passes `--exitoneapol 7` so capture can exit after PMKID/EAPOL success
+- WPA handshake path via airodump/aireplay + aircrack/hashcat/john/cowpatty
+- WPS Pixie-Dust / PIN via reaver (or bully)
+- Offline crack enhancements: `--rules`, `--mask`, `--increment`, `--hc-args`
+
+### CN audit profile (`--cn`)
+
+- After dictionary failure, runs a **bounded mask pipeline** (digit/letter templates, WPA min length 8)
+- Auto-enable only when IANA timezone is clearly CN-related (`Asia/Shanghai`, etc.); not by UTC offset alone
+- Override: `--cn` / `--no-cn` / `CK_WIFI_REGION`
+- Does **not** invent device default passwords or claim vendor CVEs from OUI alone
+
+### Passive intel (advisory only)
+
+- OUI lookup (system ieee-data / manuf / nmap prefixes first, small fallback table)
+- Optional SSID operator/vendor **hints** with conflict handling
+- Prints recommended attack **order** and defensive checklist
+- Explicitly does not claim “this AP is vulnerable”
+
+### WPA3 awareness
+
+- Transition Mode (SAE+PSK): notes downgrade feasibility (offline WPA2 path may still exist)
+- Pure SAE: notes offline dictionary attack is not applicable
+
+### Ops
+
+- Startup update check against GitHub Releases (3s timeout, silent on failure; disable with `--no-update`)
+- Session logs under `~/.ck-wifikiller/logs/` (disable with `CK_WIFI_NO_LOG=1`)
+- Tag-triggered CI: build `.deb`, publish Release, refresh apt repo on GitHub Pages
+
+---
+
+## Install / 安装
+
+### 1) apt repository (recommended)
 
 ```bash
-# 添加 apt 仓库 / Add apt repo
 echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
   | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
 sudo apt update
 sudo apt install -y ck-wifikiller
 
-# 升级 / Upgrade
+# upgrade later
 sudo apt update && sudo apt install --only-upgrade ck-wifikiller
 ```
 
-> 依赖（aircrack-ng/hashcat/hcxtools/hcxdumptool/tshark）由 deb 自动拉取。
+Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `hcxdumptool`, `tshark` (or `wireshark-common`), `iw`, `net-tools`.
 
-### 方式 2：Release .deb 手动安装 / Manual .deb
+### 2) Manual `.deb` from Releases
 
 ```bash
-# 从 GitHub Releases 下载 / Download from Releases
 sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark
 sudo apt install ./ck-wifikiller_*.deb
 ```
 
-### 方式 3：源码 / From source
+### 3) From source
 
 ```bash
 git clone https://github.com/cknb6/ck-wifikiller.git
-cd ck-wifikiller && sudo pip3 install -e .
+cd ck-wifikiller
+sudo pip3 install -e .
 ```
 
-### 方式 4：Docker / Container
+### 4) Docker
 
 ```bash
 docker build -t ck-wifikiller .
-# 需挂载无线网卡 + privileged
+# wireless capture needs host network + privileges
 docker run --rm --net=host --privileged ck-wifikiller --recon status
 ```
 
----
-
-## 🚀 用法 / Usage
-
-```bash
-sudo ck-wifikiller                          # 全自动扫描+攻击
-sudo ck-wifikiller --recon status           # L1 工具矩阵 + 依赖检测
-sudo ck-wifikiller --recon kismet           # Kismet 引导 + REST 探测
-sudo ck-wifikiller --recon bettercap        # 生成 bettercap caplet
-sudo ck-wifikiller --recon report           # 汇总 JSON 报告
-sudo ck-wifikiller --pmkid                  # 优先 PMKID 路径
-sudo ck-wifikiller --dict /path/wl.txt      # 指定字典
-sudo ck-wifikiller --cn                     # 国内 WiFi 智能优化（掩码管线）
-sudo ck-wifikiller --rules /usr/share/hashcat/rules/best64.rule
-sudo ck-wifikiller --mask '?d?d?d?d?d?d?d?d'   # 8 位纯数字掩码
-sudo ck-wifikiller --increment --increment-max 8
-sudo ck-wifikiller --no-update                 # 关闭启动更新检测
-sudo ck-wifikiller --crack                     # 破解已抓握手/PMKID
-sudo ck-wifikiller --check hs/handshake.cap    # 检查 .cap 是否含握手
-```
-
-> 启动时自动检测 GitHub 最新版本并提示升级（离线/超时静默跳过）。
-
----
-
-## 🏗️ 架构 / Architecture (2026 toolchain)
-
-详见 [docs/TOOLCHAIN-2026.md](docs/TOOLCHAIN-2026.md)。
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  L1 Recon  侦察层                                         │
-│  Kismet (Wi-Fi/BT/Zigbee WIDS) · bettercap · airodump-ng │
-├──────────────────────────────────────────────────────────┤
-│  L2 Capture  采集层                                       │
-│  hcxdumptool + BPF (--exitoneapol) · airodump + aireplay │
-├──────────────────────────────────────────────────────────┤
-│  L3 Crack  破解层                                         │
-│  hashcat -m 22000 + 内置词典 + rules/mask/increment + CN  │
-└──────────────────────────────────────────────────────────┘
-```
-
-| 层 | 角色 | 工具 | ck-wifikiller |
-|:---|:-----|:-----|:--------------|
-| **L1** | 无线 Nmap + WIDS | Kismet 2025-09-R1+ | `--recon kismet\|status\|report` |
-| L1 | 主动 recon / PMKID assoc | bettercap | `--recon bettercap` 生成 caplet |
-| L1 | 经典 AP/客户端表 | airodump-ng | 内置 Scanner |
-| **L2** | PMKID + EAPOL 采集 | hcxdumptool + BPF | 现代 PMKID 攻击 |
-| L2 | 统一哈希转换 | hcxpcapngtool → `hc22000` | 替代 hcxpcaptool |
-| **L3** | GPU 爆破 | hashcat `-m 22000` | 内置词典 + rules/mask/increment |
-| L3 | 国内优化 | CN mask pipeline | `--cn` 8/11 位数字、手机号 |
-| L3 | 厂商识别 | OUI advisory | 攻击前打印厂商/推荐路径 |
-| L3 | WPA3 检测 | SAE+PSK 检测 | 降级可行性提示 |
-
-### 废弃对照 / Deprecation (2018 → 2026)
-
-| 旧 / Old | 新 / New |
-|:---------|:---------|
-| hashcat `-m 2500` / hccapx | `-m 22000` / hc22000 |
-| hashcat `-m 16800` | `-m 22000`（WPA*01* PMKID） |
-| `hcxpcaptool` | `hcxpcapngtool` |
-| hcxdumptool `--filterlist` | `--bpf=` + BPF |
-| pyrit | 可选；Kali 常缺省 |
-
----
-
-## 🔧 依赖 / Dependencies
+### Optional tools
 
 ```bash
 sudo apt install -y \
-  aircrack-ng hashcat hcxtools hcxdumptool tshark \
-  reaver bully macchanger iw net-tools \
+  reaver bully macchanger \
   kismet kismet-capture-linux-wifi kismet-capture-linux-bluetooth \
   bettercap
 ```
 
 ---
 
-## 📦 发布 / Release
+## Usage / 用法
 
-Tag-triggered CI pipeline (`.github/workflows/build-deb.yml`)：
-
-1. **build-deb**：Debian 容器内 `dpkg-buildpackage` 构建 `.deb` → lintian 校验 → 上传产物
-2. **apt-repo**：下载 `.deb` → `dpkg-scanpackages` + `apt-ftparchive` 生成签名 Debian 仓库 → 推送 `gh-pages`（GitHub Pages 提供 apt 源）
-3. **publish-release**：创建/更新 GitHub Release，附加 `.deb` + `SHA256SUMS`
+Root is required for monitor mode / injection paths. Recon-only modes may still need root for Kismet/bettercap.
 
 ```bash
-git tag v2.5.0 && git push origin v2.5.0
-# → CI 构建 .deb + 发布 Release + 更新 apt 仓库（apt install 即可装到新版）
+sudo ck-wifikiller                          # scan + attack flow
+sudo ck-wifikiller --recon status           # tool matrix + dependency probe
+sudo ck-wifikiller --recon kismet           # Kismet guidance / REST probe
+sudo ck-wifikiller --recon bettercap        # generate bettercap caplet
+sudo ck-wifikiller --recon report           # summary JSON report
+sudo ck-wifikiller --pmkid                  # PMKID-only path
+sudo ck-wifikiller --dict /path/wl.txt      # custom wordlist
+sudo ck-wifikiller --cn                     # force CN audit profile
+sudo ck-wifikiller --no-cn                  # disable CN profile + auto detect
+sudo ck-wifikiller --rules /usr/share/hashcat/rules/best64.rule
+sudo ck-wifikiller --mask '?d?d?d?d?d?d?d?d'
+sudo ck-wifikiller --increment --increment-max 8
+sudo ck-wifikiller --no-update              # skip release check
+sudo ck-wifikiller --crack                  # crack saved handshake / PMKID
+sudo ck-wifikiller --check hs/handshake.cap
+sudo ck-wifikiller --cracked                # show saved results
 ```
 
-本地不构建 `.deb`，全部由 CI 完成。
+Default wordlist resolution order (first existing file wins):
+
+1. `wordlists/ck-default-wpa.txt` (repo / package: ~253806 lines)
+2. `wordlists/wpa-top4800.txt`
+3. system paths under `/usr/share/ck-wifikiller/...` and common dict locations
 
 ---
 
-## 🧪 测试 / Tests
+## Architecture / 架构
 
-```bash
-./runtests.sh   # 或 python3 -m unittest discover tests -v
+See [docs/TOOLCHAIN-2026.md](docs/TOOLCHAIN-2026.md).
+
+```
++------------------------------------------------------------------+
+|  L1 Recon                                                         |
+|  Kismet · bettercap · airodump-ng                                 |
++------------------------------------------------------------------+
+|  L2 Capture                                                       |
+|  hcxdumptool + BPF · airodump-ng + aireplay-ng                    |
++------------------------------------------------------------------+
+|  L3 Crack                                                         |
+|  hashcat -m 22000 · aircrack-ng · optional john/cowpatty          |
+|  rules / mask / increment · CN bounded masks · OUI advisory       |
++------------------------------------------------------------------+
 ```
 
-覆盖：命令注入安全（BPF/packetforge/aircrack argv）、Target BSSID 校验、hashcat 参数（increment 仅掩码/WPA 最小 8 位）、CN 时区判断、OUI 厂商识别、进程封装、入口点。
+| Layer | Role | Tool | ck-wifikiller hook |
+|------:|------|------|--------------------|
+| L1 | WIDS / inventory | Kismet | `--recon kismet\|status\|report` |
+| L1 | active recon helper | bettercap | `--recon bettercap` (caplet) |
+| L1 | classic AP table | airodump-ng | built-in scanner |
+| L2 | PMKID + EAPOL | hcxdumptool | modern PMKID attack |
+| L2 | hash export | hcxpcapngtool | `*.hc22000` |
+| L3 | GPU crack | hashcat `-m 22000` | wordlist + rules/mask |
+| L3 | intel | OUI/SSID advisory | print-only guidance |
+
+### Deprecation map (2018 → modern)
+
+| Old | New |
+|-----|-----|
+| hashcat `-m 2500` / hccapx | `-m 22000` / hc22000 |
+| hashcat `-m 16800` | `-m 22000` (`WPA*01*` PMKID) |
+| `hcxpcaptool` | `hcxpcapngtool` |
+| hcxdumptool `--filterlist` | `--bpf` (+ fallback) |
+| pyrit | optional; often absent on Kali |
 
 ---
 
-## 🙏 致谢 / Credits
+## Security notes (implementation)
 
-- Original [wifite2](https://github.com/derv82/wifite2) by derv82 & contributors (GPL-2.0)
+Recent hardening (v2.5.1) includes:
+
+- External tools run as argv arrays (`shell=True` disabled)
+- Interface / BSSID / channel input validation
+- Temp paths strip directory components (no `../` escape)
+- Decloak deauth targets **client station MAC**, not AP BSSID
+- `cracked.txt` atomic write + tolerant load of corrupt JSON
+- `Process.devnull()` uses `subprocess.DEVNULL` (no FD leak)
+
+This is a privileged wireless audit tool. Treat it as root-equivalent software on your lab machine.
+
+---
+
+## Release / 发布
+
+Tag-triggered CI (`.github/workflows/build-deb.yml`):
+
+1. **build-deb** — `dpkg-buildpackage` in Debian container, lintian, artifact upload
+2. **apt-repo** — packages + `Packages`/`Release` on `gh-pages` (GitHub Pages apt source)
+3. **publish-release** — GitHub Release with `.deb` and `SHA256SUMS`
+
+```bash
+git tag v2.5.1 && git push origin v2.5.1
+```
+
+Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is the canonical path.
+
+---
+
+## Tests / 测试
+
+```bash
+./runtests.sh
+# or
+python3 -m unittest discover -s tests -v
+```
+
+Coverage includes: argv/shell safety, BSSID validation, hashcat argument ordering, CN region detection, OUI advisory constraints, process wrapper, temp path safety, deauth station MAC, cracked-file robustness, CLI entrypoint.
+
+---
+
+## Docs
+
+| File | Content |
+|------|---------|
+| [docs/INSTALL-KALI.md](docs/INSTALL-KALI.md) | Kali install notes |
+| [docs/TOOLCHAIN-2026.md](docs/TOOLCHAIN-2026.md) | Toolchain layering |
+| [PMKID.md](PMKID.md) | PMKID notes |
+| [EVILTWIN.md](EVILTWIN.md) | Evil Twin design notes (not fully implemented) |
+| [AGENTS.md](AGENTS.md) | Repo agent notes |
+
+---
+
+## Credits
+
+- Original [wifite2](https://github.com/derv82/wifite2) by derv82 and contributors (GPL-2.0)
 - [hcxdumptool](https://github.com/ZerBea/hcxdumptool) / [hcxtools](https://github.com/ZerBea/hcxtools) by ZerBea
-- [hashcat](https://hashcat.net/) · [Kismet](https://www.kismetwireless.net/) · [bettercap](https://www.bettercap.org/)
+- [hashcat](https://hashcat.net/) · [Kismet](https://www.kismetwireless.net/) · [bettercap](https://www.bettercap.org/) · aircrack-ng suite
 
-## 📄 License
+## License
 
 GNU GPL v2 — same as wifite2. See `LICENSE` and `debian/copyright`.

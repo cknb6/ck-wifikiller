@@ -14,7 +14,7 @@ This project is a **modern orchestration shell for wifite2**: it calls maintaine
 | L2 Convert | 统一哈希 | **hcxpcapngtool** → `hc22000` | 替代 hcxpcaptool |
 | **L3 Crack** | GPU 爆破 | **hashcat -m 22000** | 内置词典 + `--dict` + rules/mask/increment |
 | L3 CN | 国内优化 | **CN mask pipeline** | `--cn` 8/11 位数字、手机号、生日 |
-| L3 Intel | 厂商识别 | **OUI advisory** | 攻击前打印厂商/CVE/推荐路径 |
+| L3 Intel | 厂商识别 | **OUI advisory** | 攻击前打印厂商/推荐路径/防御核查（不声明 CVE） |
 | L3 WPA3 | Transition 检测 | **SAE+PSK 检测** | 降级可行性提示（Dragonblood） |
 
 ## Kali 安装依赖 / Install deps
