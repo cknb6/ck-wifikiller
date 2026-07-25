@@ -158,13 +158,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$APT_GPG_PRIVATE_KEY" ]]; then
-            echo "Required GitHub Secret APT_GPG_PRIVATE_KEY is not configured." >&2
-            exit 1
-          fi
-          if [[ -z "$APT_GPG_PASSPHRASE" ]]; then
-            echo "Required GitHub Secret APT_GPG_PASSPHRASE is not configured." >&2
-            exit 1
+          # GPG Secret 未配置时跳过签名，apt 仓库用 [trusted=yes] 明文发布。
+          if [[ -z "$APT_GPG_PRIVATE_KEY" || -z "$APT_GPG_PASSPHRASE" ]]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "APT GPG secrets not configured; publishing unsigned [trusted=yes] repository."
+            exit 0
           fi
 
           install -d -m 0700 "$GNUPGHOME"
@@ -181,16 +179,18 @@ jobs:
             exit 1
           fi
 
+          echo "signed=true" >> "$GITHUB_OUTPUT"
           echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
           gpg --batch --yes --export "$fingerprint" > repo/ck-wifikiller-archive-keyring.gpg
           printf '%s\n' "$fingerprint" > repo/ck-wifikiller-archive-keyring.fingerprint
 
-      - name: Build signed APT repository
+      - name: Build APT repository
         env:
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
           EXPECTED_VERSION: ${{ needs.build-deb.outputs.upstream }}
           GNUPGHOME: ${{ runner.temp }}/ck-wifikiller-gnupg
           SIGNING_FINGERPRINT: ${{ steps.signing-key.outputs.fingerprint }}
+          SIGNED: ${{ steps.signing-key.outputs.signed }}
         shell: bash
         run: |
           set -euo pipefail
@@ -240,7 +240,7 @@ jobs:
             -o APT::FTPArchive::Release::Codename=stable \
             -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
             -o APT::FTPArchive::Release::Components=main \
-            -o APT::FTPArchive::Release::Description="ck-wifikiller signed APT repository" \
+            -o APT::FTPArchive::Release::Description="ck-wifikiller APT repository" \
             -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
             release . > Release
 
@@ -253,19 +253,26 @@ jobs:
           done
 
           rm -f InRelease Release.gpg
-          printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-            --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-            --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-            --clearsign --output InRelease Release
-          printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-            --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-            --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-            --armor --detach-sign --output Release.gpg Release
+          if [[ "$SIGNED" == "true" ]]; then
+            printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+              --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+              --clearsign --output InRelease Release
+            printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+              --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+              --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+              --armor --detach-sign --output Release.gpg Release
+          else
+            # 未签名：InRelease 用明文 Release 内容（apt 端用 [trusted=yes]）
+            cp Release InRelease
+          fi
 
           cd ../..
           touch .nojekyll
 
       - name: Verify APT metadata for supported architectures
+        env:
+          SIGNED: ${{ steps.signing-key.outputs.signed }}
         shell: bash
         run: |
           set -euo pipefail
@@ -275,8 +282,13 @@ jobs:
           for arch in amd64 arm64; do
             apt_root="${RUNNER_TEMP}/apt-smoke-${arch}"
             mkdir -p "$apt_root/etc" "$apt_root/lists/partial" "$apt_root/cache/archives/partial"
-            printf 'deb [arch=%s signed-by=%s] file:%s stable main\n' \
-              "$arch" "$keyring" "$repository" > "$apt_root/etc/sources.list"
+            if [[ "$SIGNED" == "true" ]]; then
+              printf 'deb [arch=%s signed-by=%s] file:%s stable main\n' \
+                "$arch" "$keyring" "$repository" > "$apt_root/etc/sources.list"
+            else
+              printf 'deb [arch=%s trusted=yes] file:%s stable main\n' \
+                "$arch" "$repository" > "$apt_root/etc/sources.list"
+            fi
 
             apt_options=(
               -o "APT::Architecture=${arch}"
@@ -289,7 +301,7 @@ jobs:
             apt-cache "${apt_options[@]}" show ck-wifikiller >/dev/null
           done
 
-      - name: Commit signed APT repository
+      - name: Commit APT repository
         env:
           TAG: ${{ needs.build-deb.outputs.tag }}
         shell: bash
