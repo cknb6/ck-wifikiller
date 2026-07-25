@@ -95,23 +95,41 @@ It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestra
 
 ### 1) apt repository (recommended)
 
+Kali 默认源**不包含**本包。若只运行 `sudo apt install ck-wifikiller` 而不添加源，会报：
+
+`错误：无法定位软件包 ck-wifikiller`
+
+必须先添加第三方源，再安装：
+
 ```bash
+# step 1: add repository (once)
 echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
   | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
+
+# step 2: refresh index
 sudo apt update
+
+# step 3: install
 sudo apt install -y ck-wifikiller
 
 # upgrade later
 sudo apt update && sudo apt install --only-upgrade ck-wifikiller
 ```
 
-Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `hcxdumptool`, `tshark` (or `wireshark-common`), `iw`, `net-tools`.
-
-### 2) Manual `.deb` from Releases
+Verify the source is present:
 
 ```bash
-sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark
-sudo apt install ./ck-wifikiller_*.deb
+cat /etc/apt/sources.list.d/ck-wifikiller.list
+apt-cache policy ck-wifikiller
+```
+
+Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `hcxdumptool`, `tshark` (or `wireshark-common`), `iw`, `net-tools`.
+
+### 2) Manual `.deb` from Releases (no apt repo)
+
+```bash
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.1/ck-wifikiller_2.5.1_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.1_all.deb
 ```
 
 ### 3) From source

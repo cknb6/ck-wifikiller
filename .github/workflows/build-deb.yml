@@ -225,50 +225,56 @@ jobs:
             cp -- "$package" "$destination"
           done
 
-          for arch in amd64 arm64; do
-            index_dir="repo/dists/stable/main/binary-${arch}"
-            mkdir -p "$index_dir"
-            dpkg-scanpackages --arch all --multiversion repo/pool /dev/null > "$index_dir/Packages"
-            gzip -n -9 -c "$index_dir/Packages" > "$index_dir/Packages.gz"
-          done
+          # 必须在 repo/ 根目录扫描 pool/，否则 Filename 会错误地带上
+          # 「repo/」前缀，GitHub Pages apt 下载路径 404。
+          (
+            cd repo
+            for arch in amd64 arm64 all; do
+              index_dir="dists/stable/main/binary-${arch}"
+              mkdir -p "$index_dir"
+              dpkg-scanpackages --arch all --multiversion pool /dev/null \
+                > "$index_dir/Packages"
+              gzip -n -9 -c "$index_dir/Packages" > "$index_dir/Packages.gz"
+            done
 
-          cd repo/dists/stable
-          apt-ftparchive \
-            -o APT::FTPArchive::Release::Origin=ck-wifikiller \
-            -o APT::FTPArchive::Release::Label=ck-wifikiller \
-            -o APT::FTPArchive::Release::Suite=stable \
-            -o APT::FTPArchive::Release::Codename=stable \
-            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
-            -o APT::FTPArchive::Release::Components=main \
-            -o APT::FTPArchive::Release::Description="ck-wifikiller APT repository" \
-            -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
-            release . > Release
+            cd dists/stable
+            apt-ftparchive \
+              -o APT::FTPArchive::Release::Origin=ck-wifikiller \
+              -o APT::FTPArchive::Release::Label=ck-wifikiller \
+              -o APT::FTPArchive::Release::Suite=stable \
+              -o APT::FTPArchive::Release::Codename=stable \
+              -o APT::FTPArchive::Release::Architectures="amd64 arm64 all" \
+              -o APT::FTPArchive::Release::Components=main \
+              -o APT::FTPArchive::Release::Description="ck-wifikiller APT repository" \
+              -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
+              release . > Release
 
-          for index in main/binary-amd64/Packages main/binary-amd64/Packages.gz \
-                       main/binary-arm64/Packages main/binary-arm64/Packages.gz; do
-            digest="$(sha256sum "$index" | awk '{print $1}')"
-            by_hash_dir="$(dirname "$index")/by-hash/SHA256"
-            mkdir -p "$by_hash_dir"
-            cp -- "$index" "$by_hash_dir/$digest"
-          done
+            for index in main/binary-amd64/Packages main/binary-amd64/Packages.gz \
+                         main/binary-arm64/Packages main/binary-arm64/Packages.gz \
+                         main/binary-all/Packages main/binary-all/Packages.gz; do
+              digest="$(sha256sum "$index" | awk '{print $1}')"
+              by_hash_dir="$(dirname "$index")/by-hash/SHA256"
+              mkdir -p "$by_hash_dir"
+              cp -- "$index" "$by_hash_dir/$digest"
+            done
 
-          rm -f InRelease Release.gpg
-          if [[ "$SIGNED" == "true" ]]; then
-            printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-              --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-              --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-              --clearsign --output InRelease Release
-            printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-              --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-              --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-              --armor --detach-sign --output Release.gpg Release
-          else
-            # 未签名：InRelease 用明文 Release 内容（apt 端用 [trusted=yes]）
-            cp Release InRelease
-          fi
+            rm -f InRelease Release.gpg
+            if [[ "$SIGNED" == "true" ]]; then
+              printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+                --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+                --clearsign --output InRelease Release
+              printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
+                --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+                --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
+                --armor --detach-sign --output Release.gpg Release
+            else
+              # 未签名：InRelease 用明文 Release 内容（apt 端用 [trusted=yes]）
+              cp Release InRelease
+            fi
+          )
 
-          cd ../..
-          touch .nojekyll
+          touch repo/.nojekyll
 
       - name: Verify APT metadata for supported architectures
         env:
@@ -299,8 +305,19 @@ jobs:
             )
             sudo apt-get "${apt_options[@]}" update
             apt-cache "${apt_options[@]}" show ck-wifikiller >/dev/null
-          done
 
+            # 校验 Filename 不以 repo/ 开头，且 deb 文件真实存在
+            filename="$(apt-cache "${apt_options[@]}" show ck-wifikiller \
+              | awk -F': ' '/^Filename:/{print $2; exit}')"
+            if [[ -z "$filename" || "$filename" == repo/* ]]; then
+              echo "Invalid package Filename in index: ${filename:-<empty>}" >&2
+              exit 1
+            fi
+            if [[ ! -f "${repository}/${filename}" ]]; then
+              echo "Package file missing at ${repository}/${filename}" >&2
+              exit 1
+            fi
+          done
       - name: Commit APT repository
         env:
           TAG: ${{ needs.build-deb.outputs.tag }}
