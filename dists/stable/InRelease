@@ -1,0 +1,33 @@
+Acquire-By-Hash: yes
+Architectures: amd64 arm64
+Codename: stable
+Components: main
+Date: Sat, 25 Jul 2026 14:12:53 +0000
+Description: ck-wifikiller APT repository
+Label: ck-wifikiller
+Origin: ck-wifikiller
+Suite: stable
+MD5Sum:
+ ad809a799203bce639487ea7e4fac0f4              219 Release
+ 474436156ffe02f5e46900e722d58de6              964 main/binary-amd64/Packages
+ 52cd8b88e8951bf80af4ad3c325b3199              646 main/binary-amd64/Packages.gz
+ 474436156ffe02f5e46900e722d58de6              964 main/binary-arm64/Packages
+ 52cd8b88e8951bf80af4ad3c325b3199              646 main/binary-arm64/Packages.gz
+SHA1:
+ 70efa05411fdc0dac23264be2fe84663269553c1              219 Release
+ 15a17fb9eeac45a5cdfe80db4f8cf9c8a59276b1              964 main/binary-amd64/Packages
+ ae21f0a0a42b515d26458d907c901779134af881              646 main/binary-amd64/Packages.gz
+ 15a17fb9eeac45a5cdfe80db4f8cf9c8a59276b1              964 main/binary-arm64/Packages
+ ae21f0a0a42b515d26458d907c901779134af881              646 main/binary-arm64/Packages.gz
+SHA256:
+ 3081868b15e24e418fd2f67ff31fa46468abe1845c7677e4fddf369ba26671e2              219 Release
+ 496120ac7af6534962381f1a6fbc90d1f4a583c198658de49bf29aef7dd5d7b4              964 main/binary-amd64/Packages
+ 897de8bba75ff5c50279f5a4eae55659b2dd58cbd97cffe5114e0ba20eccab92              646 main/binary-amd64/Packages.gz
+ 496120ac7af6534962381f1a6fbc90d1f4a583c198658de49bf29aef7dd5d7b4              964 main/binary-arm64/Packages
+ 897de8bba75ff5c50279f5a4eae55659b2dd58cbd97cffe5114e0ba20eccab92              646 main/binary-arm64/Packages.gz
+SHA512:
+ b1415471591cb74d412776fa2cde4f5d5b963207048b39961dd75fb4c969050f0d35f819a653adb2566d18e7c2bd860bff7578ca6e069a3f750a787a4c7ae0e2              219 Release
+ ac6180428767b30ff378293dd443b3a5c24dd8079fa6ff7c8b42af2d916937741eef87facaba62264c1684f769165e0e5125f9656b08c0621f3a338950210acc              964 main/binary-amd64/Packages
+ a376aa8d350e256fe64d7bdc337830bf4c3b10a284c35eda99f68fc8ba7101f1288efd6f44c75543059096474ec4633b76cbf6f9bdd58ca2ae2509c03671fc04              646 main/binary-amd64/Packages.gz
+ ac6180428767b30ff378293dd443b3a5c24dd8079fa6ff7c8b42af2d916937741eef87facaba62264c1684f769165e0e5125f9656b08c0621f3a338950210acc              964 main/binary-arm64/Packages
+ a376aa8d350e256fe64d7bdc337830bf4c3b10a284c35eda99f68fc8ba7101f1288efd6f44c75543059096474ec4633b76cbf6f9bdd58ca2ae2509c03671fc04              646 main/binary-arm64/Packages.gz
