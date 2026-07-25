@@ -118,73 +118,66 @@ class Target(object):
         raw = (self.auth_raw + ' ' + self.privacy_raw).upper()
         return 'SAE' in raw and 'PSK' in raw
 
-    def to_str(self, show_bssid=False):
+    def to_str(self, show_bssid=False, essid_width=24):
         '''
-            *Colored* string representation of this Target.
-            Specifically formatted for the 'scanning' table view.
+            扫描表一行。ESSID 等列按终端显示宽度对齐（中文占 2 列）。
         '''
+        from ..util.term_layout import pad
 
-        max_essid_len = 24
-        essid = self.essid if self.essid_known else '(%s)' % self.bssid
-        # Trim ESSID (router name) if needed
-        if len(essid) > max_essid_len:
-            essid = essid[0:max_essid_len-3] + '...'
-        else:
-            essid = essid.rjust(max_essid_len)
-
+        raw = self.essid if self.essid_known else '(%s)' % self.bssid
+        essid_plain = pad(raw, essid_width)
         if self.essid_known:
-            # Known ESSID
-            essid = Color.s('{C}%s' % essid)
+            essid = Color.s('{C}%s' % essid_plain)
         else:
-            # Unknown ESSID
-            essid = Color.s('{O}%s' % essid)
-
-        # Add a '*' if we decloaked the ESSID
-        decloaked_char = '*' if self.decloaked else ' '
-        essid += Color.s('{P}%s' % decloaked_char)
-
-        if show_bssid:
-            bssid = Color.s('{O}%s  ' % self.bssid)
+            essid = Color.s('{O}%s' % essid_plain)
+        if self.decloaked:
+            essid += Color.s('{P}*{W}')
         else:
-            bssid = ''
+            essid += ' '
 
-        channel_color = '{G}'
-        if int(self.channel) > 14:
-            channel_color = '{C}'
-        channel = Color.s('%s%s' % (channel_color, str(self.channel).rjust(3)))
+        bssid = Color.s('{O}%s{W}  ' % self.bssid) if show_bssid else ''
 
-        encryption = self.encryption.rjust(4)
-        if 'WEP' in encryption:
-            encryption = Color.s('{G}%s' % encryption)
-        elif 'WPA' in encryption:
-            encryption = Color.s('{O}%s' % encryption)
+        try:
+            ch_num = int(str(self.channel).strip() or '0')
+        except ValueError:
+            ch_num = 0
+        channel_color = '{C}' if ch_num > 14 else '{G}'
+        channel = Color.s('%s%s{W}' % (channel_color, pad(str(self.channel), 3, align='right')))
 
-        power = '%sdb' % str(self.power).rjust(3)
+        enc_plain = pad(self.encryption[:4], 4)
+        if 'WEP' in self.encryption:
+            encryption = Color.s('{G}%s{W}' % enc_plain)
+        elif 'WPA' in self.encryption:
+            encryption = Color.s('{O}%s{W}' % enc_plain)
+        else:
+            encryption = Color.s('{W}%s{W}' % enc_plain)
+
+        power_plain = pad('%sdb' % self.power, 5, align='right')
         if self.power > 50:
-            color ='G'
+            pcolor = 'G'
         elif self.power > 35:
-            color = 'O'
+            pcolor = 'O'
         else:
-            color = 'R'
-        power = Color.s('{%s}%s' % (color, power))
+            pcolor = 'R'
+        power = Color.s('{%s}%s{W}' % (pcolor, power_plain))
 
         if self.wps == WPSState.UNLOCKED:
-            wps = Color.s('{G} yes')
+            wps = Color.s('{G}%s{W}' % pad('yes', 4))
         elif self.wps == WPSState.NONE:
-            wps = Color.s('{O}  no')
+            wps = Color.s('{O}%s{W}' % pad('no', 4))
         elif self.wps == WPSState.LOCKED:
-            wps = Color.s('{R}lock')
-        elif self.wps == WPSState.UNKNOWN:
-            wps = Color.s('{O} n/a')
+            wps = Color.s('{R}%s{W}' % pad('lock', 4))
+        else:
+            wps = Color.s('{O}%s{W}' % pad('n/a', 4))
 
-        clients = '       '
-        if len(self.clients) > 0:
-            clients = Color.s('{G}  ' + str(len(self.clients)))
+        n_clients = len(self.clients)
+        if n_clients > 0:
+            clients = Color.s('{G}%s{W}' % pad(str(n_clients), 4, align='right'))
+        else:
+            clients = pad('', 4)
 
-        result = '%s  %s%s  %s  %s  %s  %s' % (
-                essid, bssid, channel, encryption, power, wps, clients)
-        result += Color.s('{W}')
-        return result
+        return '%s %s%s  %s  %s  %s  %s%s' % (
+            essid, bssid, channel, encryption, power, wps, clients, Color.s('{W}'))
 
 
 if __name__ == '__main__':

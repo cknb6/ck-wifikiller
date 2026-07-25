@@ -130,28 +130,38 @@ class Scanner(object):
 
         self.previous_target_count = len(self.targets)
 
-        # Overwrite the current line
+        # 按终端宽度动态计算 ESSID 列（中文双宽安全）
+        from .term_layout import pad, term_cols
+        cols = term_cols()
+        # NUM(4)+gap + fixed cols + optional BSSID(17)
+        fixed = 4 + 2 + 3 + 2 + 4 + 2 + 5 + 2 + 4 + 2 + 4 + 2
+        if Configuration.show_bssids:
+            fixed += 17 + 2
+        essid_width = max(12, min(36, cols - fixed - 2))
+
         Color.p('\r{W}{D}')
-
-        # First row: columns
-        Color.p('   NUM')
-        Color.p('                      ESSID')
+        header = '%s  %s' % (pad('NUM', 4, align='right'), pad('ESSID', essid_width))
         if Configuration.show_bssids:
-            Color.p('              BSSID')
-        Color.pl('   CH  ENCR  POWER  WPS?  CLIENT')
-
-        # Second row: separator
-        Color.p('   ---')
-        Color.p('  -------------------------')
+            header += '  %s' % pad('BSSID', 17)
+        header += '  %s  %s  %s  %s  %s' % (
+            pad('CH', 3, align='right'),
+            pad('ENCR', 4),
+            pad('POWER', 5, align='right'),
+            pad('WPS', 4),
+            pad('CLI', 4, align='right'),
+        )
+        Color.pl(header)
+        sep = '%s  %s' % (pad('---', 4), '-' * essid_width)
         if Configuration.show_bssids:
-            Color.p('  -----------------')
-        Color.pl('  ---  ----  -----  ----  ------{W}')
+            sep += '  %s' % ('-' * 17)
+        sep += '  %s  %s  %s  %s  %s{W}' % (
+            '-' * 3, '-' * 4, '-' * 5, '-' * 4, '-' * 4)
+        Color.pl(sep)
 
-        # Remaining rows: targets
         for idx, target in enumerate(self.targets, start=1):
             Color.clear_entire_line()
-            Color.p('   {G}%s  ' % str(idx).rjust(3))
-            Color.pl(target.to_str(Configuration.show_bssids))
+            Color.p('{G}%s{W}  ' % pad(str(idx), 4, align='right'))
+            Color.pl(target.to_str(Configuration.show_bssids, essid_width=essid_width))
 
     @staticmethod
     def get_terminal_height():

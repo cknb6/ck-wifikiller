@@ -48,8 +48,6 @@ class CKWifiKiller(object):
             from .util.session_log import SessionLog
             if SessionLog.enabled():
                 self._session = SessionLog.get()
-                Color.pl('{+} session log: {C}%s{W}' % self._session.dir)
-                Color.pl('{+} {D}升级反馈可填 feedback.md · Issues: github.com/cknb6/ck-wifikiller/issues{W}')
         except Exception:
             self._session = None
 
@@ -147,8 +145,7 @@ def entry_point():
             app._session.event('interrupted', {})
     finally:
         if app and getattr(app, '_session', None):
-            logdir = app._session.finalize(code)
-            Color.pl('{+} session log saved: {C}%s{W}' % logdir)
+            app._session.finalize(code)
     return code
 
 

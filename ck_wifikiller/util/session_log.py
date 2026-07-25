@@ -35,7 +35,6 @@ class SessionLog:
         self.meta_path = os.path.join(self.dir, 'meta.json')
         self.feedback_path = os.path.join(self.dir, 'feedback.md')
         self._write_meta_initial()
-        self._write_feedback_template()
         self.event('session_start', {'argv': sys.argv[:], 'cwd': os.getcwd()})
 
     @classmethod

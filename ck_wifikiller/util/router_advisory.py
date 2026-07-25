@@ -84,28 +84,19 @@ CHINA_ROUTER_PROFILES = {
     'Ruijie/Reyee': {'segment': '企业/中小企业', 'family': '锐捷 / Reyee'},
 }
 
-# 基于厂商的攻击路径优先级提示（仅排序建议，不声称漏洞或默认凭据）。
-# 运营商定制网关（华为/中兴/烽火）常开启 WPS，优先 Pixie-Dust；
-# 家用设备优先无客户端的 PMKID 与握手捕获。
+# 厂商 → 攻击路径关键字（用于队列排序，输出尽量短）
 VENDOR_ATTACK_PATHS = {
-    'TP-Link': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'Mercury': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'Fast': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'Xiaomi': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'Tenda': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'H3C': ['PMKID (clientless)', 'WPA handshake', 'WPS Pixie-Dust'],
-    'Huawei': ['WPS Pixie-Dust', 'WPA handshake', 'PMKID (clientless)'],
-    'ZTE': ['WPS Pixie-Dust', 'WPA handshake', 'PMKID (clientless)'],
-    'FiberHome': ['WPS Pixie-Dust', 'WPA handshake', 'PMKID (clientless)'],
-    'Ruijie/Reyee': ['WPA handshake', 'PMKID (clientless)', 'WPS Pixie-Dust'],
+    'TP-Link': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'Mercury': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'Fast': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'Xiaomi': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'Tenda': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'H3C': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
+    'Huawei': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
+    'ZTE': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
+    'FiberHome': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
+    'Ruijie/Reyee': ['handshake', 'PMKID', 'WPS Pixie-Dust'],
 }
-
-BASE_AUDIT_CHECKS = (
-    '从设备标签或管理页面确认精确型号、硬件版本和固件版本',
-    '只按精确型号与固件版本匹配厂商公告，OUI/SSID 不用于判定漏洞',
-    '核查 WPA2/WPA3、PMF(802.11w)、WPS 和访客网络隔离配置',
-    '确认管理面仅对受信任 LAN 开放，并备份配置后再升级固件',
-)
 
 
 def normalize_oui(bssid: str) -> str:
@@ -212,19 +203,15 @@ def fingerprint_router(bssid: str, essid: str = '') -> dict:
 
 
 def get_advisory(bssid: str, essid: str = '') -> Optional[dict]:
-    """返回防御性核查清单；没有任何可用证据时返回 ``None``。"""
+    """厂商指纹 + 攻击路径排序；无防御清单。"""
     fingerprint = fingerprint_router(bssid, essid)
     if fingerprint['confidence'] == 'none':
         return None
     vendor = fingerprint.get('vendor')
     profile = CHINA_ROUTER_PROFILES.get(vendor)
-    checks = list(BASE_AUDIT_CHECKS)
-    if fingerprint.get('operator'):
-        checks.insert(1, '运营商网关优先通过客服/ACS 确认定制固件与升级状态')
     return {
         **fingerprint,
-        'segment': profile.get('segment') if profile else '运营商接入场景',
+        'segment': profile.get('segment') if profile else None,
         'family': profile.get('family') if profile else None,
         'recommended_paths': VENDOR_ATTACK_PATHS.get(vendor) if vendor else None,
-        'audit_checks': checks,
     }

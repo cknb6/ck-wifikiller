@@ -46,45 +46,12 @@ class AttackAll(object):
         Returns: True if attacks should continue, False otherwise.
         '''
 
-        # 路由器厂商识别 + 审计建议（2026：针对性攻击路径排序）
-        cls.print_vendor_advisory(target)
-
-        # WPA3 前沿 PoC 检测：Transition Mode 可降级，纯 SAE 仅在线爆破
-        cls.print_wpa3_advisory(target)
-
-        attacks = []
-
-        if Configuration.use_eviltwin:
-            # TODO: EvilTwin attack
-            pass
-
-        elif 'WEP' in target.encryption:
-            attacks.append(AttackWEP(target))
-
-        elif 'WPA' in target.encryption:
-            # WPA can have multiple attack vectors:
-
-            # WPS：仅在明确非 NONE 时尝试（UNKNOWN/UNLOCKED/LOCKED）
-            if not Configuration.use_pmkid_only:
-                if target.wps != WPSState.NONE and AttackWPS.can_attack_wps():
-                    # Pixie-Dust
-                    if Configuration.wps_pixie:
-                        attacks.append(AttackWPS(target, pixie_dust=True))
-
-                    # PIN attack
-                    if Configuration.wps_pin:
-                        attacks.append(AttackWPS(target, pixie_dust=False))
-
-            if not Configuration.wps_only:
-                # PMKID
-                attacks.append(AttackPMKID(target))
-
-                # Handshake capture
-                if not Configuration.use_pmkid_only:
-                    attacks.append(AttackWPA(target))
+        # 精简提示 + 按厂商推荐顺序排攻击队列
+        cls._print_target_brief(target)
+        attacks = cls._build_attack_queue(target)
 
         if len(attacks) == 0:
-            Color.pl('{!} {R}Error: {O}Unable to attack: no attacks available')
+            Color.pl('{!} {R}no attack available for this target{W}')
             return True  # Keep attacking other targets (skip)
 
         attack = None
@@ -114,40 +81,83 @@ class AttackAll(object):
 
 
     @staticmethod
-    def print_vendor_advisory(target):
-        '''识别路由器厂商并打印针对性审计建议（不实际攻击，仅辅助排序）。'''
+    def _print_target_brief(target):
+        '''一行厂商 + WPA3 提示，无防御清单。'''
         try:
             from ..util.router_advisory import get_advisory
-            # 传入 ESSID，才能利用 SSID 指纹与运营商场景提示
             essid = target.essid if getattr(target, 'essid_known', False) else ''
             adv = get_advisory(target.bssid, essid or '')
         except Exception:
-            return
-        if not adv:
-            return
-        vendor = adv.get('vendor', 'Unknown')
-        Color.pl('{+} {C}厂商识别 / Vendor{W}: {G}%s{W} (BSSID {D}%s{W})' % (vendor, target.bssid))
-        paths = adv.get('recommended_paths')
-        if paths:
-            Color.pl('{+} {O}推荐攻击路径 / Recommended{W}: {C}%s{W}' % ' → '.join(paths))
-        checks = adv.get('audit_checks')
-        if checks:
-            Color.pl('{+} {D}防御核查清单 / Audit checks{W}:')
-            for check in checks[:3]:
-                Color.pl('{+}   {D}%s{W}' % check)
-
-    @staticmethod
-    def print_wpa3_advisory(target):
-        '''WPA3 前沿 PoC 检测提示（仅检测，不攻击）。'''
+            adv = None
+        vendor = (adv or {}).get('vendor')
+        paths = (adv or {}).get('recommended_paths') or []
+        if vendor:
+            msg = '{+} {C}%s{W}' % vendor
+            if paths:
+                msg += '  {D}%s{W}' % ' > '.join(paths[:3])
+            Color.pl(msg)
         try:
             if target.is_wpa3_transition():
-                Color.pl('{!} {O}WPA3 Transition Mode 检测到 (SAE+PSK){W}')
-                Color.pl('{!} {O}可降级攻击 / Downgrade viable: hostapd-mana 伪 AP + deauth → WPA2 握手{W}')
-                Color.pl('{!} {D}前提: MFP(802.11w) 未强制；需 Wireshark 确认{W}')
+                Color.pl('{!} {O}WPA3 transition (SAE+PSK) — may downgrade to WPA2{W}')
             elif target.is_wpa3_sae():
-                Color.pl('{!} {O}纯 WPA3-SAE: 离线爆破不可行，仅在线爆破 (Wacker){W}')
+                Color.pl('{!} {O}WPA3-SAE only — offline crack N/A{W}')
         except Exception:
-            return
+            pass
+
+    @staticmethod
+    def _build_attack_queue(target):
+        '''构建攻击队列；有厂商推荐路径时重排 WPA 向量顺序。'''
+        if Configuration.use_eviltwin:
+            return []
+
+        if 'WEP' in target.encryption:
+            return [AttackWEP(target)]
+
+        if 'WPA' not in target.encryption:
+            return []
+
+        # 命名便于排序
+        named = {}
+        if not Configuration.use_pmkid_only:
+            if target.wps != WPSState.NONE and AttackWPS.can_attack_wps():
+                if Configuration.wps_pixie:
+                    named['wps_pixie'] = AttackWPS(target, pixie_dust=True)
+                if Configuration.wps_pin:
+                    named['wps_pin'] = AttackWPS(target, pixie_dust=False)
+        if not Configuration.wps_only:
+            named['pmkid'] = AttackPMKID(target)
+            if not Configuration.use_pmkid_only:
+                named['handshake'] = AttackWPA(target)
+
+        # 默认顺序
+        default_order = ['wps_pixie', 'wps_pin', 'pmkid', 'handshake']
+
+        # 厂商路径关键字 → 队列键
+        path_map = {
+            'pmkid': 'pmkid',
+            'handshake': 'handshake',
+            'wpa handshake': 'handshake',
+            'wps': 'wps_pixie',
+            'pixie': 'wps_pixie',
+            'pixie-dust': 'wps_pixie',
+            'wps pixie-dust': 'wps_pixie',
+            'wps pin': 'wps_pin',
+        }
+        order = []
+        try:
+            from ..util.router_advisory import get_advisory
+            essid = target.essid if getattr(target, 'essid_known', False) else ''
+            adv = get_advisory(target.bssid, essid or '') or {}
+            for path in adv.get('recommended_paths') or []:
+                key = path_map.get(path.strip().lower())
+                if key and key in named and key not in order:
+                    order.append(key)
+        except Exception:
+            pass
+        for key in default_order:
+            if key in named and key not in order:
+                order.append(key)
+        return [named[k] for k in order if k in named]
 
 
     @classmethod

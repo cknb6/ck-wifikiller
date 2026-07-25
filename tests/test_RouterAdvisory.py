@@ -39,11 +39,11 @@ class RouterAdvisoryTest(unittest.TestCase):
         self.assertTrue(result['conflict'])
         self.assertIsNone(result['vendor'])
 
-    def test_advisory_never_claims_vulnerability(self):
+    def test_advisory_is_attack_path_only(self):
         advisory = get_advisory('34:F7:16:00:11:22', 'TP-LINK_ABCD')
         self.assertEqual(advisory['vendor'], 'TP-Link')
-        self.assertIn('不能确认', advisory['limitations'])
-        self.assertTrue(advisory['audit_checks'])
+        self.assertTrue(advisory.get('recommended_paths'))
+        self.assertNotIn('audit_checks', advisory)
 
 
 if __name__ == '__main__':
