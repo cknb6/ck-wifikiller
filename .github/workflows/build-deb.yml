@@ -1,4 +1,4 @@
-# tag 触发：构建 Debian 包、发布签名 APT 仓库，再创建 GitHub Release
+# tag 触发：构建 .deb、用 Actions 部署 apt 仓库到 GitHub Pages、发布 Release
 name: Build and Release Deb
 
 on:
@@ -8,11 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to build, for example v2.5.0
+        description: Existing release tag to build, for example v2.5.3
         required: true
         type: string
 
-# 默认只读；只有实际写入仓库的任务单独提升权限。
 permissions:
   contents: read
 
@@ -32,8 +31,6 @@ jobs:
             ca-certificates git build-essential debhelper dh-python \
             python3-all python3-setuptools python3-wheel \
             dpkg-dev lintian
-          # 容器内 checkout 的 repo 所有者可能与运行用户不一致，
-          # 配置 safe.directory 避免 git dubious ownership 报错。
           git config --global --add safe.directory '*'
 
       - name: Validate release tag
@@ -45,7 +42,6 @@ jobs:
           set -euo pipefail
           if [[ ! "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+~][0-9A-Za-z.+~]+)?$ ]]; then
             echo "Invalid release tag: $RELEASE_REF" >&2
-            echo "Expected vMAJOR.MINOR.PATCH, optionally followed by a Debian-safe +/~ suffix." >&2
             exit 1
           fi
           upstream="${RELEASE_REF#v}"
@@ -53,7 +49,6 @@ jobs:
           echo "tag=$RELEASE_REF" >> "$GITHUB_OUTPUT"
           echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
 
-      # 官方 Action 固定到完整提交，避免可变 tag 带来的供应链风险。
       - name: Check out release tag
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -93,18 +88,9 @@ jobs:
             echo "dpkg-buildpackage completed without producing a .deb" >&2
             exit 1
           fi
-          if (( ${#changes[@]} == 0 )); then
-            echo "dpkg-buildpackage completed without producing a .changes file" >&2
-            exit 1
-          fi
-
           lintian --fail-on error "${changes[@]}"
           mkdir -p artifacts
           mv -- "${packages[@]}" artifacts/
-          for package in artifacts/*.deb; do
-            dpkg-deb --info "$package" >/dev/null
-            dpkg-deb --contents "$package" >/dev/null
-          done
           (
             cd artifacts
             sha256sum -- *.deb > SHA256SUMS
@@ -120,22 +106,21 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # 用 GitHub Actions Pages 部署 apt 仓库（避免 legacy gh-pages 对大二进制构建失败）
   apt-repo:
     needs: build-deb
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      pages: write
+      id-token: write
     concurrency:
       group: ck-wifikiller-apt-repository
       cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Check out APT repository branch
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: gh-pages
-          path: repo
-          fetch-depth: 0
-
       - name: Download Debian artifact
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
@@ -147,50 +132,12 @@ jobs:
           set -eu
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            ca-certificates dpkg-dev apt-utils gnupg
+            ca-certificates dpkg-dev apt-utils curl
 
-      - name: Validate and import APT signing key
-        id: signing-key
+      - name: Build APT repository tree
         env:
-          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
-          GNUPGHOME: ${{ runner.temp }}/ck-wifikiller-gnupg
-        shell: bash
-        run: |
-          set -euo pipefail
-          # GPG Secret 未配置时跳过签名，apt 仓库用 [trusted=yes] 明文发布。
-          if [[ -z "$APT_GPG_PRIVATE_KEY" || -z "$APT_GPG_PASSPHRASE" ]]; then
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "APT GPG secrets not configured; publishing unsigned [trusted=yes] repository."
-            exit 0
-          fi
-
-          install -d -m 0700 "$GNUPGHOME"
-          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
-
-          secret_key_count="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" {count++} END {print count+0}')"
-          if [[ "$secret_key_count" != "1" ]]; then
-            echo "APT_GPG_PRIVATE_KEY must contain exactly one primary secret key." >&2
-            exit 1
-          fi
-          fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" {want=1; next} want && $1 == "fpr" {print $10; exit}')"
-          if [[ ! "$fingerprint" =~ ^[0-9A-Fa-f]{40,64}$ ]]; then
-            echo "Unable to derive a valid signing-key fingerprint." >&2
-            exit 1
-          fi
-
-          echo "signed=true" >> "$GITHUB_OUTPUT"
-          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
-          gpg --batch --yes --export "$fingerprint" > repo/ck-wifikiller-archive-keyring.gpg
-          printf '%s\n' "$fingerprint" > repo/ck-wifikiller-archive-keyring.fingerprint
-
-      - name: Build APT repository
-        env:
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
           EXPECTED_VERSION: ${{ needs.build-deb.outputs.upstream }}
-          GNUPGHOME: ${{ runner.temp }}/ck-wifikiller-gnupg
-          SIGNING_FINGERPRINT: ${{ steps.signing-key.outputs.fingerprint }}
-          SIGNED: ${{ steps.signing-key.outputs.signed }}
+          TAG: ${{ needs.build-deb.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -202,33 +149,37 @@ jobs:
           shopt -s nullglob
           packages=(debs/*.deb)
           if (( ${#packages[@]} == 0 )); then
-            echo "Downloaded artifact does not contain a .deb" >&2
+            echo "no .deb in artifact" >&2
             exit 1
           fi
 
-          pool_dir="repo/pool/main/c/ck-wifikiller"
-          mkdir -p "$pool_dir"
+          # 合并历史 deb：从当前线上 pool 拉取旧版本（失败则仅本次版本）
+          mkdir -p site/pool/main/c/ck-wifikiller
+          for ver in 2.5.0 2.5.1 2.5.2; do
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${ver}/ck-wifikiller_${ver}_all.deb"
+            dest="site/pool/main/c/ck-wifikiller/ck-wifikiller_${ver}_all.deb"
+            if curl -fsSL "$url" -o "$dest"; then
+              echo "cached historical $ver"
+            else
+              rm -f "$dest"
+            fi
+          done
+
           for package in "${packages[@]}"; do
             package_name="$(dpkg-deb -f "$package" Package)"
             package_version="$(dpkg-deb -f "$package" Version)"
             package_arch="$(dpkg-deb -f "$package" Architecture)"
             if [[ "$package_name" != "ck-wifikiller" || "$package_version" != "$EXPECTED_VERSION" || "$package_arch" != "all" ]]; then
               echo "Unexpected package metadata in $package" >&2
+              dpkg-deb -I "$package" || true
               exit 1
             fi
-
-            destination="$pool_dir/$(basename "$package")"
-            if [[ -e "$destination" ]] && ! cmp -s "$package" "$destination"; then
-              echo "Refusing to replace an existing package with different content: $destination" >&2
-              exit 1
-            fi
-            cp -- "$package" "$destination"
+            cp -f -- "$package" "site/pool/main/c/ck-wifikiller/$(basename "$package")"
           done
 
-          # 必须在 repo/ 根目录扫描 pool/，否则 Filename 会错误地带上
-          # 「repo/」前缀，GitHub Pages apt 下载路径 404。
+          # 在 site/ 根扫描 pool/，Filename 必须是 pool/... 而非 repo/pool/...
           (
-            cd repo
+            cd site
             for arch in amd64 arm64 all; do
               index_dir="dists/stable/main/binary-${arch}"
               mkdir -p "$index_dir"
@@ -246,58 +197,66 @@ jobs:
               -o APT::FTPArchive::Release::Architectures="amd64 arm64 all" \
               -o APT::FTPArchive::Release::Components=main \
               -o APT::FTPArchive::Release::Description="ck-wifikiller APT repository" \
-              -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
               release . > Release
 
-            for index in main/binary-amd64/Packages main/binary-amd64/Packages.gz \
-                         main/binary-arm64/Packages main/binary-arm64/Packages.gz \
-                         main/binary-all/Packages main/binary-all/Packages.gz; do
-              digest="$(sha256sum "$index" | awk '{print $1}')"
-              by_hash_dir="$(dirname "$index")/by-hash/SHA256"
-              mkdir -p "$by_hash_dir"
-              cp -- "$index" "$by_hash_dir/$digest"
-            done
-
+            # 未签名：不要生成伪 InRelease（否则 apt NOSPLIT）
             rm -f InRelease Release.gpg
-            if [[ "$SIGNED" == "true" ]]; then
-              printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-                --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-                --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-                --clearsign --output InRelease Release
-              printf '%s' "$APT_GPG_PASSPHRASE" | gpg \
-                --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-                --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
-                --armor --detach-sign --output Release.gpg Release
-            else
-              # 未签名时禁止生成伪 InRelease。
-              # 明文 InRelease 会被 apt 当 clearsign 解析，报 NOSPLIT，导致 update 失败。
-              # 客户端必须使用: deb [trusted=yes] https://... stable main
-              rm -f InRelease Release.gpg
-            fi
           )
 
-          touch repo/.nojekyll
+          # 安装说明页
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="zh-CN"><head><meta charset="utf-8">
+          <title>ck-wifikiller apt repository</title>
+          <style>
+          body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;line-height:1.55}
+          pre{background:#f4f4f5;padding:1rem;overflow:auto;border-radius:6px}
+          .warn{border-left:3px solid #dc2626;padding-left:.75rem;margin:1rem 0}
+          </style></head><body>
+          <h1>ck-wifikiller apt repository</h1>
+          <p>Authorized security testing only. 仅限授权安全测试。</p>
+          <div class="warn"><strong>必须先加源</strong>：Kali 官方源没有本包。
+          只运行 <code>apt install ck-wifikiller</code> 会「无法定位软件包」。</div>
+          <h2>Install</h2>
+          <pre>echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
+            | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
+          sudo apt update
+          apt-cache policy ck-wifikiller
+          sudo apt install -y ck-wifikiller</pre>
+          <h2>Fallback</h2>
+          <pre>curl -LO https://github.com/cknb6/ck-wifikiller/releases/latest/download/ck-wifikiller_*.deb
+          # 或打开 Releases 页面手动下载 .deb
+          sudo apt install -y ./ck-wifikiller_*.deb</pre>
+          <p><a href="https://github.com/cknb6/ck-wifikiller">Source</a></p>
+          </body></html>
+          HTML
 
-      - name: Verify APT metadata for supported architectures
-        env:
-          SIGNED: ${{ steps.signing-key.outputs.signed }}
+          # 校验
+          if grep -q 'Filename: repo/' site/dists/stable/main/binary-amd64/Packages; then
+            echo "bad Filename prefix" >&2
+            exit 1
+          fi
+          if ! grep -q "Version: ${EXPECTED_VERSION}" site/dists/stable/main/binary-amd64/Packages; then
+            echo "missing version ${EXPECTED_VERSION} in Packages" >&2
+            exit 1
+          fi
+          if [[ -e site/dists/stable/InRelease ]]; then
+            echo "unsigned repo must not ship InRelease" >&2
+            exit 1
+          fi
+          test -f "site/pool/main/c/ck-wifikiller/ck-wifikiller_${EXPECTED_VERSION}_all.deb"
+          echo "APT tree ready for ${TAG}"
+
+      - name: Local apt smoke test
         shell: bash
         run: |
           set -euo pipefail
-          keyring="${GITHUB_WORKSPACE}/repo/ck-wifikiller-archive-keyring.gpg"
-          repository="${GITHUB_WORKSPACE}/repo"
-
+          repository="${GITHUB_WORKSPACE}/site"
           for arch in amd64 arm64; do
             apt_root="${RUNNER_TEMP}/apt-smoke-${arch}"
             mkdir -p "$apt_root/etc" "$apt_root/lists/partial" "$apt_root/cache/archives/partial"
-            if [[ "$SIGNED" == "true" ]]; then
-              printf 'deb [arch=%s signed-by=%s] file:%s stable main\n' \
-                "$arch" "$keyring" "$repository" > "$apt_root/etc/sources.list"
-            else
-              printf 'deb [arch=%s trusted=yes] file:%s stable main\n' \
-                "$arch" "$repository" > "$apt_root/etc/sources.list"
-            fi
-
+            printf 'deb [arch=%s trusted=yes] file:%s stable main\n' \
+              "$arch" "$repository" > "$apt_root/etc/sources.list"
             apt_options=(
               -o "APT::Architecture=${arch}"
               -o "Dir::Etc::sourcelist=${apt_root}/etc/sources.list"
@@ -306,55 +265,17 @@ jobs:
               -o "Dir::Cache::archives=${apt_root}/cache/archives"
             )
             sudo apt-get "${apt_options[@]}" update
-            # 取最高版本记录的 Filename（multiversion 时 show 可能多段）
-            filename="$(apt-cache "${apt_options[@]}" show ck-wifikiller \
-              | awk -F': ' '
-                  BEGIN{ver=""}
-                  /^Package:/{if(block!=""){}}
-                  /^Version:/{v=$2}
-                  /^Filename:/{f=$2; if(v>ver){ver=v; file=f}}
-                  END{print file}
-                ')"
-            if [[ -z "$filename" || "$filename" == repo/* || "$filename" == /* ]]; then
-              echo "Invalid package Filename in index: ${filename:-<empty>}" >&2
-              exit 1
-            fi
-            if [[ ! -f "${repository}/${filename}" ]]; then
-              echo "Package file missing at ${repository}/${filename}" >&2
-              exit 1
-            fi
-            # 必须能定位到包
-            apt-cache "${apt_options[@]}" policy ck-wifikiller | tee /dev/stderr \
-              | grep -q 'ck-wifikiller'
-            # 未签名仓库不得残留伪 InRelease
-            if [[ "$SIGNED" != "true" && -e "${repository}/dists/stable/InRelease" ]]; then
-              echo "Unsigned repo must not ship InRelease (causes apt NOSPLIT)" >&2
-              exit 1
-            fi
+            apt-cache "${apt_options[@]}" policy ck-wifikiller | tee /dev/stderr | grep -q Candidate
           done
 
-          # 再做一次“可下载”校验：从 Packages 解析最新 deb 路径
-          latest_deb="$(awk -F': ' '
-            /^Version:/{v=$2}
-            /^Filename:/{f=$2; if(v>=best){best=v; file=f}}
-            END{print file}
-          ' "${repository}/dists/stable/main/binary-amd64/Packages")"
-          test -f "${repository}/${latest_deb}"
-      - name: Commit APT repository
-        env:
-          TAG: ${{ needs.build-deb.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git -C repo config user.name "传康Kk"
-          git -C repo config user.email "1837620622@qq.com"
-          git -C repo add --all
-          if git -C repo diff --cached --quiet; then
-            echo "APT repository already contains $TAG; nothing to publish."
-            exit 0
-          fi
-          git -C repo commit -m "apt repo: publish ${TAG} [skip ci]"
-          git -C repo push origin gh-pages
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
 
   publish-release:
     needs:

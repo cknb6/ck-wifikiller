@@ -10,11 +10,11 @@ Authorized security testing only. 仅限授权安全测试。
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![hashcat](https://img.shields.io/badge/hashcat-m%2022000-49A942)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.2-success)](https://github.com/cknb6/ck-wifikiller/releases)
+[![Release](https://img.shields.io/badge/Release-v2.5.3-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 ```
 GitHub:  https://github.com/cknb6/ck-wifikiller
-Version: CK_WIFI_VERSION env > git describe > 2.5.2-ck
+Version: CK_WIFI_VERSION env > git describe > 2.5.3-ck
 Author:  传康Kk（万能程序员）
 WeChat:  1837620622  (赞助备注「wifi赞助」/ 商务「商务合作」)
 Email:   2040168455@qq.com
@@ -128,8 +128,8 @@ Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `
 ### 2) Manual `.deb` from Releases (no apt repo)
 
 ```bash
-curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.2/ck-wifikiller_2.5.2_all.deb
-sudo apt install -y ./ck-wifikiller_2.5.2_all.deb
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.3/ck-wifikiller_2.5.3_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.3_all.deb
 ```
 
 ### 3) From source
@@ -184,9 +184,15 @@ sudo ck-wifikiller --cracked                # show saved results
 
 Default wordlist resolution order (first existing file wins):
 
-1. `wordlists/ck-default-wpa.txt` (repo / package: ~253806 lines)
+1. `wordlists/ck-default-wpa.txt` (repo / package: WPA 8–63 only, CN-first, ~500k+)
 2. `wordlists/wpa-top4800.txt`
 3. system paths under `/usr/share/ck-wifikiller/...` and common dict locations
+
+Regenerate the default list with:
+
+```bash
+python3 scripts/build-wordlist.py --target 520000
+```
 
 ---
 
@@ -254,7 +260,7 @@ Tag-triggered CI (`.github/workflows/build-deb.yml`):
 3. **publish-release** — GitHub Release with `.deb` and `SHA256SUMS`
 
 ```bash
-git tag v2.5.2 && git push origin v2.5.2
+git tag v2.5.3 && git push origin v2.5.3
 ```
 
 Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is the canonical path.

@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.3-1) unstable; urgency=medium
+
+  * Expand built-in WPA wordlist: 8–63 only, CN-first weak passwords, larger set.
+  * Apt repo deploy via GitHub Actions Pages (fix legacy Pages build failure).
+  * Keep unsigned repo without InRelease; install requires [trusted=yes] source.
+
+ -- 传康Kk <1837620622@qq.com>  Sat, 25 Jul 2026 23:20:00 +0800
+
 ck-wifikiller (2.5.2-1) unstable; urgency=medium
 
   * Fix apt repository: Packages Filename must be pool/... not repo/pool/...
