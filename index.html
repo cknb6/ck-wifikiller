@@ -5,32 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ck-wifikiller apt repository</title>
   <style>
-    body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; color: #111; }
+    body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; color: #111; }
     pre { background: #f4f4f5; padding: 1rem; overflow-x: auto; border-radius: 6px; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    h1,h2 { line-height: 1.2; }
-    .note { border-left: 3px solid #2563eb; padding-left: 0.75rem; color: #333; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95em; }
+    .warn { border-left: 3px solid #dc2626; padding: 0.25rem 0 0.25rem 0.75rem; margin: 1rem 0; }
+    .ok { border-left: 3px solid #16a34a; padding: 0.25rem 0 0.25rem 0.75rem; margin: 1rem 0; }
   </style>
 </head>
 <body>
   <h1>ck-wifikiller apt repository</h1>
   <p>Authorized security testing only. 仅限授权安全测试。</p>
-  <p class="note">
-    Kali 默认源<strong>不包含</strong>本包。必须先添加下面的第三方源，再 <code>apt install</code>。
-    只执行 <code>sudo apt install ck-wifikiller</code> 会报「无法定位软件包」。
-  </p>
 
-  <h2>Install (Kali / Debian)</h2>
-  <pre>echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
+  <div class="warn">
+    <strong>重要：</strong>Kali 官方源不包含本包。必须先添加本仓库，再
+    <code>apt install</code>。只执行 <code>sudo apt install ck-wifikiller</code>
+    会报「无法定位软件包」。
+  </div>
+
+  <h2>Install</h2>
+  <pre># 1) 添加源（只做一次）
+echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
   | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
+
+# 2) 更新索引
 sudo apt update
+
+# 3) 确认候选版本
+apt-cache policy ck-wifikiller
+
+# 4) 安装
 sudo apt install -y ck-wifikiller</pre>
 
-  <h2>Upgrade</h2>
-  <pre>sudo apt update
-sudo apt install --only-upgrade ck-wifikiller</pre>
+  <div class="ok">
+    仓库当前为 <strong>[trusted=yes]</strong> 未签名模式。
+    sources 行里的 <code>trusted=yes</code> 不能省略。
+  </div>
 
-  <h2>Fallback: download .deb from GitHub Releases</h2>
+  <h2>Fallback: GitHub Release .deb</h2>
   <pre>curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.1/ck-wifikiller_2.5.1_all.deb
 sudo apt install -y ./ck-wifikiller_2.5.1_all.deb</pre>
 
