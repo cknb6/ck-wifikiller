@@ -131,11 +131,16 @@ class CrackHelper:
                 skipped_cracked_files += 1
                 continue
 
-            if hs_file.endswith('.cap'):
-                # WPA Handshake
+            # 4-WAY cap / 现代 PMKID hc22000 / 旧 16800
+            is_cap = hs_file.endswith('.cap')
+            is_pmkid = (
+                hs_file.endswith('.16800')
+                or hs_file.endswith('.22000')
+                or hs_file.endswith('.hc22000')
+            )
+            if is_cap:
                 hs_type = '4-WAY'
-            elif hs_file.endswith('.16800'):
-                # PMKID hash
+            elif is_pmkid:
                 if not Process.exists('hashcat'):
                     skipped_pmkid_files += 1
                     continue
@@ -143,11 +148,16 @@ class CrackHelper:
             else:
                 continue
 
-            name, essid, bssid, date = hs_file.split('_')
-            date = date.rsplit('.', 1)[0]
-            days,hours = date.split('T')
-            hours = hours.replace('-', ':')
-            date = '%s %s' % (days, hours)
+            # pmkid_ESSID_BSSID_DATE.ext  或 handshake_...
+            parts = hs_file.rsplit('.', 1)[0].split('_')
+            if len(parts) < 4:
+                continue
+            name, essid, bssid = parts[0], parts[1], parts[2]
+            date = '_'.join(parts[3:])
+            if 'T' in date:
+                days, hours = date.split('T', 1)
+                hours = hours.replace('-', ':')
+                date = '%s %s' % (days, hours)
 
             handshake = {
                 'filename': os.path.join(hs_dir, hs_file),
@@ -156,20 +166,10 @@ class CrackHelper:
                 'date': date,
                 'type': hs_type
             }
-
-            if hs_file.endswith('.cap'):
-                # WPA Handshake
-                handshake['type'] = '4-WAY'
-            elif hs_file.endswith('.16800'):
-                # PMKID hash
-                handshake['type'] = 'PMKID'
-            else:
-                continue
-
             handshakes.append(handshake)
 
         if skipped_pmkid_files > 0:
-            Color.pl('{!} {O}Skipping %d {R}*.16800{O} files because {R}hashcat{O} is missing.{W}\n' % skipped_pmkid_files)
+            Color.pl('{!} {O}Skipping %d PMKID/22000 files because {R}hashcat{O} is missing.{W}\n' % skipped_pmkid_files)
         if skipped_cracked_files > 0:
             Color.pl('{!} {O}Skipping %d already cracked files.{W}\n' % skipped_cracked_files)
 

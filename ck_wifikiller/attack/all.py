@@ -45,6 +45,12 @@ class AttackAll(object):
         Returns: True if attacks should continue, False otherwise.
         '''
 
+        # 路由器厂商识别 + 审计建议（2026：针对性攻击路径排序）
+        cls.print_vendor_advisory(target)
+
+        # WPA3 前沿 PoC 检测：Transition Mode 可降级，纯 SAE 仅在线爆破
+        cls.print_wpa3_advisory(target)
+
         attacks = []
 
         if Configuration.use_eviltwin:
@@ -103,6 +109,40 @@ class AttackAll(object):
             attack.crack_result.save()
 
         return True  # Keep attacking other targets
+
+
+    @staticmethod
+    def print_vendor_advisory(target):
+        '''识别路由器厂商并打印针对性审计建议（不实际攻击，仅辅助排序）。'''
+        try:
+            from ..util.router_advisory import get_advisory
+            adv = get_advisory(target.bssid)
+        except Exception:
+            return
+        if not adv:
+            return
+        vendor = adv.get('vendor', 'Unknown')
+        Color.pl('{+} {C}厂商识别 / Vendor{W}: {G}%s{W} (BSSID {D}%s{W})' % (vendor, target.bssid))
+        paths = adv.get('recommended_paths')
+        if paths:
+            Color.pl('{+} {O}推荐攻击路径 / Recommended{W}: {C}%s{W}' % ' → '.join(paths))
+        cves = adv.get('historical_cves')
+        if cves:
+            for cve in cves[:2]:
+                Color.pl('{!} {D}%s{W}' % cve)
+
+    @staticmethod
+    def print_wpa3_advisory(target):
+        '''WPA3 前沿 PoC 检测提示（仅检测，不攻击）。'''
+        try:
+            if target.is_wpa3_transition():
+                Color.pl('{!} {O}WPA3 Transition Mode 检测到 (SAE+PSK){W}')
+                Color.pl('{!} {O}可降级攻击 / Downgrade viable: hostapd-mana 伪 AP + deauth → WPA2 握手{W}')
+                Color.pl('{!} {D}前提: MFP(802.11w) 未强制；需 Wireshark 确认{W}')
+            elif target.is_wpa3_sae():
+                Color.pl('{!} {O}纯 WPA3-SAE: 离线爆破不可行，仅在线爆破 (Wacker){W}')
+        except Exception:
+            return
 
 
     @classmethod

@@ -5,10 +5,12 @@ import os
 
 from .util.color import Color
 from .tools.macchanger import Macchanger
+from ._version import get_version as _get_version
 
 class Configuration(object):
-    ''' Stores configuration variables and functions for Wifite. '''
-    version = '2.3.0-ck'  # ck-wifikiller: Kali 2024–2026 + recon layer
+    ''' Stores configuration variables and functions for ck-wifikiller. '''
+    # 版本号动态化：环境变量 CK_WIFI_VERSION > git describe > 内置基线
+    version = _get_version()
 
     initialized = False # Flag indicating config has been initialized
     temp_dir = None     # Temporary directory
@@ -83,6 +85,17 @@ class Configuration(object):
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
         cls.pmkid_timeout = 30  # Time to wait for PMKID capture
 
+        # hashcat 爆破增强（2026 前沿：rules + 掩码 + 增量）
+        cls.hashcat_rules = None       # 规则文件路径，如 /usr/share/hashcat/rules/best64.rule
+        cls.hashcat_mask = None        # 自定义掩码，如 ?d?d?d?d?d?d?d?d（8 位纯数字）
+        cls.hashcat_increment = False  # 增量爆破（短密码优先，1-8 位）
+        cls.hashcat_increment_max = 8  # 增量最大长度
+        cls.hashcat_extra_args = None  # 透传额外 hashcat 参数（高级用户）
+
+        # 国内 WiFi 智能优化（基于公开统计：8/11 位纯数字、手机号、生日占比高）
+        cls.cn_optimize = False        # 字典失败后自动追加国内常用掩码管线
+        cls.cn_mask_limit = 4          # 自动掩码阶段数量（控制耗时）
+
         # Default dictionary for cracking（优先 ck 增强词典）
         cls.cracked_file = 'cracked.txt'
         cls.wordlist = None
@@ -148,6 +161,7 @@ class Configuration(object):
         cls.parse_wpa_args(args)
         cls.parse_wps_args(args)
         cls.parse_pmkid_args(args)
+        cls.parse_hashcat_args(args)
         cls.parse_encryption()
 
         # EvilTwin
@@ -294,13 +308,13 @@ class Configuration(object):
         if args.wordlist:
             if not os.path.exists(args.wordlist):
                 cls.wordlist = None
-                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} was not found, wifite will NOT attempt to crack handshakes' % args.wordlist)
+                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} was not found, ck-wifikiller will NOT attempt to crack handshakes' % args.wordlist)
             elif os.path.isfile(args.wordlist):
                 cls.wordlist = args.wordlist
                 Color.pl('{+} {C}option:{W} using wordlist {G}%s{W} to crack WPA handshakes' % args.wordlist)
             elif os.path.isdir(args.wordlist):
                 cls.wordlist = None
-                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} is a directory, not a file. Wifite will NOT attempt to crack handshakes' % args.wordlist)
+                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} is a directory, not a file. ck-wifikiller will NOT crack' % args.wordlist)
 
         if args.wpa_deauth_timeout:
             cls.wpa_deauth_timeout = args.wpa_deauth_timeout
@@ -400,6 +414,41 @@ class Configuration(object):
             Color.pl('{+} {C}option:{W} will wait {G}%d seconds{W} during {C}PMKID{W} capture' % args.pmkid_timeout)
 
     @classmethod
+    def parse_hashcat_args(cls, args):
+        '''hashcat 爆破增强参数（rules / mask / 增量 / 透传）'''
+        if getattr(args, 'hashcat_rules', None):
+            if os.path.isfile(args.hashcat_rules):
+                cls.hashcat_rules = args.hashcat_rules
+                Color.pl('{+} {C}option:{W} hashcat rules: {G}%s{W}' % args.hashcat_rules)
+            else:
+                Color.pl('{!} {O}rules file not found, ignoring: {R}%s{W}' % args.hashcat_rules)
+
+        if getattr(args, 'hashcat_mask', None):
+            cls.hashcat_mask = args.hashcat_mask
+            Color.pl('{+} {C}option:{W} hashcat mask brute force: {G}%s{W}' % args.hashcat_mask)
+
+        if getattr(args, 'hashcat_increment', False):
+            cls.hashcat_increment = True
+            Color.pl('{+} {C}option:{W} hashcat incremental mode {G}enabled{W}')
+
+        if getattr(args, 'hashcat_increment_max', None):
+            cls.hashcat_increment_max = args.hashcat_increment_max
+            Color.pl('{+} {C}option:{W} hashcat increment max length {G}%d{W}'
+                     % args.hashcat_increment_max)
+
+        if getattr(args, 'hashcat_extra_args', None):
+            cls.hashcat_extra_args = args.hashcat_extra_args
+            Color.pl('{+} {C}option:{W} hashcat extra args: {G}%s{W}' % args.hashcat_extra_args)
+
+        if getattr(args, 'cn_optimize', False):
+            cls.cn_optimize = True
+            Color.pl('{+} {C}option:{W} {G}国内 WiFi 智能优化 / CN optimization{W} enabled')
+
+        if getattr(args, 'cn_mask_limit', None):
+            cls.cn_mask_limit = args.cn_mask_limit
+            Color.pl('{+} {C}option:{W} CN mask stages: {G}%d{W}' % args.cn_mask_limit)
+
+    @classmethod
     def parse_encryption(cls):
         '''Adjusts encryption filter (WEP and/or WPA and/or WPS)'''
         cls.encryption_filter = []
@@ -458,7 +507,7 @@ class Configuration(object):
     def create_temp():
         ''' Creates and returns a temporary directory '''
         from tempfile import mkdtemp
-        tmp = mkdtemp(prefix='wifite')
+        tmp = mkdtemp(prefix='ck-wifikiller-')
         if not tmp.endswith(os.sep):
             tmp += os.sep
         return tmp

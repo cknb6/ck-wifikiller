@@ -48,6 +48,17 @@ class Target(object):
         if len(self.encryption) > 4:
             self.encryption = self.encryption[0:4].strip()
 
+        # 保留原始认证/加密信息，用于 WPA3 SAE / Transition Mode 检测（2026 前沿）
+        # airodump-ng 现代版 Authentication 列可能含 SAE / PSK / SAE+PSK
+        try:
+            self.auth_raw = fields[7].strip() if len(fields) > 7 else ''
+        except Exception:
+            self.auth_raw = ''
+        try:
+            self.privacy_raw = fields[5].strip() if len(fields) > 5 else ''
+        except Exception:
+            self.privacy_raw = ''
+
         self.power      = int(fields[8].strip())
         if self.power < 0:
             self.power += 100
@@ -86,6 +97,20 @@ class Target(object):
         bssid_multicast = re.compile(r'^(01:00:5e|01:80:c2|33:33)', re.IGNORECASE)
         if bssid_multicast.match(self.bssid):
             raise Exception('Ignoring target with Multicast BSSID (%s)' % self.bssid)
+
+    def is_wpa3_sae(self) -> bool:
+        '''是否纯 WPA3-SAE（无 PSK），离线爆破不可行，仅在线爆破(Wacker)。'''
+        raw = (self.auth_raw + ' ' + self.privacy_raw).upper()
+        return 'SAE' in raw and 'PSK' not in raw
+
+    def is_wpa3_transition(self) -> bool:
+        '''是否 WPA3 Transition Mode（SAE+PSK 并存），可降级抓 WPA2 握手。
+
+        前沿 PoC 检测: Dragonblood 降级攻击前提条件之一。
+        仅检测、不攻击；MFP 状态需 Wireshark 进一步确认。
+        '''
+        raw = (self.auth_raw + ' ' + self.privacy_raw).upper()
+        return 'SAE' in raw and 'PSK' in raw
 
     def to_str(self, show_bssid=False):
         '''

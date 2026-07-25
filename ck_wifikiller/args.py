@@ -32,6 +32,7 @@ class Arguments(object):
         self._add_wpa_args(parser.add_argument_group(Color.s('{C}WPA{W}')))
         self._add_wps_args(parser.add_argument_group(Color.s('{C}WPS{W}')))
         self._add_pmkid_args(parser.add_argument_group(Color.s('{C}PMKID{W}')))
+        self._add_hashcat_args(parser.add_argument_group(Color.s('{C}HASHCAT{W}')))
         self._add_eviltwin_args(parser.add_argument_group(Color.s('{C}EVIL TWIN{W}')))
         self._add_command_args(parser.add_argument_group(Color.s('{C}COMMANDS{W}')))
 
@@ -443,6 +444,57 @@ class Arguments(object):
                          type=int,
                          help=Color.s('Time to wait for PMKID capture ' +
                                       '(default: {G}%d{W} seconds)' % self.config.pmkid_timeout))
+
+    def _add_hashcat_args(self, hc):
+        hc.add_argument('--rules',
+            action='store',
+            dest='hashcat_rules',
+            metavar='[file]',
+            type=str,
+            help=Color.s('hashcat rules file for mutation cracking, e.g. '
+                         '{C}/usr/share/hashcat/rules/best64.rule{W}'))
+
+        hc.add_argument('--mask',
+            action='store',
+            dest='hashcat_mask',
+            metavar='[mask]',
+            type=str,
+            help=Color.s('hashcat mask for brute force after wordlist, e.g. '
+                         '{C}?d?d?d?d?d?d?d?d{W} (8-digit number)'))
+
+        hc.add_argument('--increment',
+            action='store_true',
+            dest='hashcat_increment',
+            help=Color.s('Enable hashcat incremental mode (short passwords first)'))
+
+        hc.add_argument('--increment-max',
+            action='store',
+            dest='hashcat_increment_max',
+            metavar='[len]',
+            type=int,
+            help=self._verbose('Max password length for incremental mode '
+                '(default: {G}%d{W})' % self.config.hashcat_increment_max))
+
+        hc.add_argument('--hc-args',
+            action='store',
+            dest='hashcat_extra_args',
+            metavar='[args]',
+            type=str,
+            help=self._verbose('Extra args passed through to hashcat (advanced)'))
+
+        hc.add_argument('--cn',
+            action='store_true',
+            dest='cn_optimize',
+            help=Color.s('China WiFi optimization: auto mask pipeline after wordlist '
+                         '(8/11-digit, phone, birthday)'))
+
+        hc.add_argument('--cn-mask-limit',
+            action='store',
+            dest='cn_mask_limit',
+            metavar='[n]',
+            type=int,
+            help=self._verbose('Number of CN mask stages (default: {G}%d{W})'
+                               % self.config.cn_mask_limit))
 
     def _add_command_args(self, commands):
         commands.add_argument('--cracked',

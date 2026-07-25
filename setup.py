@@ -4,9 +4,12 @@ from setuptools import setup, find_packages
 
 from ck_wifikiller.config import Configuration
 
+# 健壮处理版本号：git tag 可能带 v 前缀，基线带 -ck 后缀
+_raw_ver = Configuration.version.lstrip('v').replace('-ck', '').split('-')[0]
+
 setup(
     name='ck-wifikiller',
-    version=Configuration.version.replace('-ck', ''),
+    version=_raw_ver,
     author='传康Kk',
     author_email='1837620622@qq.com',
     url='https://github.com/cknb6/ck-wifikiller',

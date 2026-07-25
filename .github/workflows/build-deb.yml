@@ -1,0 +1,76 @@
+# tag 触发：在 Debian 容器构建 .deb 并自动发布 GitHub Release
+# 本地不构建；CI 内完成 dpkg-buildpackage
+name: Build and Release Deb
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - name: Install build deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git build-essential debhelper dh-python python3-all python3-setuptools \
+            python3-pybuild dpkg-dev
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF##*/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # 去掉 v 前缀，作为 deb 上游版本
+          UPSTREAM="${TAG#v}"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+
+      - name: Sync debian/changelog with tag
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+          UPSTREAM: ${{ steps.ver.outputs.upstream }}
+        run: |
+          set -e
+          DATE=$(date -R)
+          cat > debian/changelog <<EOF
+          ck-wifikiller (${UPSTREAM}-1) unstable; urgency=medium
+
+            * Automated release for ${TAG}.
+            * PMKID hashcat rules/mask/increment; CN WiFi optimization; WPA3 transition detection.
+            * Router OUI vendor advisory; dynamic versioning; session logging.
+
+           -- ck-wifikiller <1837620622@qq.com>  ${DATE}
+          EOF
+
+      - name: Build .deb
+        run: |
+          chmod +x debian/rules
+          dpkg-buildpackage -us -uc -b
+          mkdir -p artifacts
+          mv ../ck-wifikiller_*.deb artifacts/ || true
+          mv ../ck-wifikiller_*.build artifacts/ 2>/dev/null || true
+          ls -la artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ck-wifikiller-deb
+          path: artifacts/*.deb
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.tag }}
+          generate_release_notes: true
+          files: artifacts/*.deb

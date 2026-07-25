@@ -61,21 +61,81 @@ class Hashcat(Dependency):
         return line.rsplit(':', 1)[-1].strip() or None
 
     @staticmethod
+    def _extra_attack_args() -> list[str]:
+        """根据 Configuration 构建 hashcat 附加参数（rules/mask/increment/透传）。"""
+        extra: list[str] = []
+        rules = getattr(Configuration, 'hashcat_rules', None)
+        if rules and os.path.isfile(rules):
+            extra.extend(['-r', rules])
+        if getattr(Configuration, 'hashcat_increment', False):
+            extra.append('--increment')
+            extra.extend(['--increment-min', '1'])
+            extra.extend(['--increment-max',
+                          str(getattr(Configuration, 'hashcat_increment_max', 8))])
+        raw = getattr(Configuration, 'hashcat_extra_args', None)
+        if raw:
+            if isinstance(raw, str):
+                extra.extend(raw.split())
+            else:
+                extra.extend([str(x) for x in raw])
+        return extra
+
+    @staticmethod
     def crack_hc22000(hash_file: str, verbose: bool = False) -> str | None:
-        """对 hashcat -m 22000 文件跑字典（握手+PMKID 通用）。"""
-        if Configuration.wordlist is None:
+        """对 hashcat -m 22000 文件跑字典（握手+PMKID 通用）。
+
+        2026 增强：支持 rules 变换、掩码爆破(-a 3)、增量、透传参数。
+        """
+        if Configuration.wordlist is None and Configuration.hashcat_mask is None:
             return None
         if not os.path.isfile(hash_file):
             return None
 
+        mask = getattr(Configuration, 'hashcat_mask', None)
+        attack_args = Hashcat._extra_attack_args()
+
+        # 两阶段：先字典(-a 0)，再掩码(-a 3)（若提供 mask）
+        phases: list[tuple[list[str], bool]] = []
+        if Configuration.wordlist is not None:
+            phases.append((['-a', '0', hash_file, Configuration.wordlist], False))
+        if mask:
+            phases.append((['-a', '3', hash_file, mask], True))
+
+        for base, is_mask in phases:
+            for additional_arg in ([], ['--show']):
+                command = [
+                    'hashcat',
+                    '--quiet',
+                    '-m', Hashcat.MODE_WPA,
+                    '--self-test-disable',
+                ]
+                command.extend(base)
+                if not is_mask:
+                    command.extend(attack_args)
+                if Hashcat.should_use_force():
+                    command.append('--force')
+                command.extend(additional_arg)
+                if verbose and not additional_arg:
+                    Color.pl('{+} {D}Running: {W}{P}%s{W}' % ' '.join(command))
+                proc = Process(command)
+                proc.wait()
+                key = Hashcat._extract_key(proc.stdout() or '')
+                if key:
+                    return key
+        return None
+
+    @staticmethod
+    def crack_hc22000_mask(hash_file: str, mask: str, verbose: bool = False) -> str | None:
+        """对 hc22000 文件跑单个掩码爆破（-a 3），供国内优化管线复用。"""
+        if not mask or not os.path.isfile(hash_file):
+            return None
         for additional_arg in ([], ['--show']):
             command = [
-                'hashcat',
-                '--quiet',
+                'hashcat', '--quiet',
                 '-m', Hashcat.MODE_WPA,
-                '-a', '0',
-                hash_file,
-                Configuration.wordlist,
+                '--self-test-disable',
+                '-a', '3',
+                hash_file, mask,
             ]
             if Hashcat.should_use_force():
                 command.append('--force')

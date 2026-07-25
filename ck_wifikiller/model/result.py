@@ -11,8 +11,15 @@ from json import loads, dumps
 class CrackResult(object):
     ''' Abstract class containing results from a crack session '''
 
-    # File to save cracks to, in PWD
-    cracked_file = Configuration.cracked_file
+    # 延迟读取，避免类定义时 Configuration 尚未 initialize
+    cracked_file = 'cracked.txt'
+
+    @classmethod
+    def get_cracked_file(cls):
+        try:
+            return getattr(Configuration, 'cracked_file', None) or cls.cracked_file
+        except Exception:
+            return cls.cracked_file
 
     def __init__(self):
         self.date = int(time.time())
@@ -39,7 +46,7 @@ class CrackResult(object):
 
     def save(self):
         ''' Adds this crack result to the cracked file and saves it. '''
-        name = CrackResult.cracked_file
+        name = CrackResult.get_cracked_file()
         saved_results = []
         if os.path.exists(name):
             with open(name, 'r') as fid:
@@ -57,7 +64,7 @@ class CrackResult(object):
             if entry == this_dict:
                 # Skip if we already saved this BSSID+ESSID+TYPE+KEY
                 Color.pl('{+} {C}%s{O} already exists in {G}%s{O}, skipping.' % (
-                    self.essid, Configuration.cracked_file))
+                    self.essid, name))
                 return
 
         saved_results.append(self.to_dict())
@@ -69,7 +76,7 @@ class CrackResult(object):
     @classmethod
     def display(cls):
         ''' Show cracked targets from cracked file '''
-        name = cls.cracked_file
+        name = cls.get_cracked_file()
         if not os.path.exists(name):
             Color.pl('{!} {O}file {C}%s{O} not found{W}' % name)
             return
@@ -109,8 +116,10 @@ class CrackResult(object):
 
     @classmethod
     def load_all(cls):
-        if not os.path.exists(cls.cracked_file): return []
-        with open(cls.cracked_file, 'r') as json_file:
+        path = cls.get_cracked_file()
+        if not os.path.exists(path):
+            return []
+        with open(path, 'r') as json_file:
             json = loads(json_file.read())
         return json
 

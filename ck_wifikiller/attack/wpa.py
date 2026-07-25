@@ -70,13 +70,49 @@ class AttackWPA(Attack):
         key = Aircrack.crack_handshake(handshake, show_command=False)
         if key is None:
             Color.pl('{!} {R}Failed to crack handshake: {O}%s{R} did not contain password{W}' % Configuration.wordlist.split(os.sep)[-1])
-            self.success = False
+            # 国内 WiFi 智能优化：aircrack 字典失败后，转 hc22000 走 hashcat 掩码管线（闭环）
+            if getattr(Configuration, 'cn_optimize', False):
+                key = self._cn_mask_pipeline(handshake)
+            if key is None:
+                self.success = False
         else:
             Color.pl('{+} {G}Cracked WPA Handshake{W} PSK: {G}%s{W}\n' % key)
             self.crack_result = CrackResultWPA(handshake.bssid, handshake.essid, handshake.capfile, key)
             self.crack_result.dump()
             self.success = True
         return self.success
+
+
+    def _cn_mask_pipeline(self, handshake):
+        '''国内 WiFi 掩码自动管线：cap→hc22000→hashcat 多掩码爆破，命中即返回。'''
+        try:
+            from ..tools.hashcat import HcxPcapTool, Hashcat
+            from ..util.cn_strategy import recommend_masks
+            from ..util.router_advisory import identify_vendor
+            if not Process.exists('hashcat') or not HcxPcapTool.exists():
+                Color.pl('{!} {O}跳过 CN 掩码管线: 缺少 hashcat/hcxpcapngtool{W}')
+                return None
+            hc_file = HcxPcapTool.generate_hc22000_file(handshake.capfile)
+        except Exception as e:
+            Color.pl('{!} {O}CN 掩码管线转换失败: {R}%s{W}' % str(e))
+            return None
+        try:
+            vendor = identify_vendor(self.target.bssid) or ''
+            masks = recommend_masks(self.target.essid, vendor,
+                                    limit=getattr(Configuration, 'cn_mask_limit', 4))
+            Color.pl('{+} {O}国内掩码管线 / CN mask pipeline: {C}%d 阶段{W}' % len(masks))
+            for idx, mask in enumerate(masks, 1):
+                Color.pl('{+} {C}CN-OPT{W} mask {C}%d/%d{W} {D}%s{W} ...' % (idx, len(masks), mask))
+                key = Hashcat.crack_hc22000_mask(hc_file, mask, verbose=False)
+                if key:
+                    return key
+            return None
+        finally:
+            try:
+                if hc_file and os.path.exists(hc_file):
+                    os.remove(hc_file)
+            except OSError:
+                pass
 
 
     def capture_handshake(self):

