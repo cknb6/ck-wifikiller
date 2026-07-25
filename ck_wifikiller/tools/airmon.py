@@ -117,7 +117,10 @@ class Airmon(Dependency):
         Iwconfig.mode(iface, 'monitor')
         Ifconfig.up(iface)
 
-        # /sys/class/net/wlan0/type
+        # /sys/class/net/wlan0/type —— 校验接口名，防止路径穿越读任意文件
+        from ..util.validate import is_safe_iface
+        if not is_safe_iface(iface):
+            return None
         iface_type_path = os.path.join('/sys/class/net', iface, 'type')
         if os.path.exists(iface_type_path):
             with open(iface_type_path, 'r') as f:
@@ -132,6 +135,9 @@ class Airmon(Dependency):
         Manually put interface into managed mode (no airmon-ng or vif).
         Fix for bad drivers like the rtl8812AU.
         '''
+        from ..util.validate import is_safe_iface
+        if not is_safe_iface(iface):
+            return None
         Ifconfig.down(iface)
         Iwconfig.mode(iface, 'managed')
         Ifconfig.up(iface)

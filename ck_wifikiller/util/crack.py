@@ -102,14 +102,18 @@ class CrackHelper:
     def is_cracked(cls, file):
         if not os.path.exists(Configuration.cracked_file):
             return False
-        with open(Configuration.cracked_file) as f:
-            json = loads(f.read())
-        if json is None:
+        try:
+            with open(Configuration.cracked_file, encoding='utf-8', errors='replace') as f:
+                data = loads(f.read() or '[]')
+        except Exception:
             return False
-        for result in json:
-            for k in result.keys():
-                v = result[k]
-                if 'file' in k and os.path.basename(v) == file:
+        if not isinstance(data, list):
+            return False
+        for result in data:
+            if not isinstance(result, dict):
+                continue
+            for k, v in result.items():
+                if 'file' in k and isinstance(v, str) and os.path.basename(v) == file:
                     return True
         return False
 

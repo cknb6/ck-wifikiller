@@ -322,9 +322,14 @@ class Airodump(Dependency):
             iface = Configuration.interface
             Process(deauth_cmd + ['-a', target.bssid, iface])
 
-            # Deauth clients
+            # Deauth clients：-c 必须是客户端 Station MAC，不是 AP 的 BSSID。
+            # 旧代码误用 client.bssid（等于 AP），导致隐藏 SSID 去认证对客户端无效。
+            from ..util.validate import is_mac_address
             for client in target.clients:
-                Process(deauth_cmd + ['-a', target.bssid, '-c', client.bssid, iface])
+                station = getattr(client, 'station', None)
+                if not station or not is_mac_address(station):
+                    continue
+                Process(deauth_cmd + ['-a', target.bssid, '-c', station, iface])
 
 if __name__ == '__main__':
     ''' Example usage. wlan0mon should be in Monitor Mode '''

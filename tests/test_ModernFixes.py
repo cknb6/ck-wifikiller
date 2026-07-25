@@ -211,6 +211,9 @@ class TestHashcatArguments(unittest.TestCase):
             self.assertNotIn('--increment', command)
             self.assertIn('-r', command)
             self.assertIn('two words', command)
+            # 选项必须出现在 hash/wordlist 位置参数之前
+            self.assertLess(command.index('-r'), command.index('capture.hc22000'))
+            self.assertLess(command.index('capture.hc22000'), command.index('wordlist.txt'))
         for command in mask_commands:
             self.assertIn('--increment', command)
             self.assertNotIn('-r', command)
@@ -219,6 +222,7 @@ class TestHashcatArguments(unittest.TestCase):
             self.assertEqual(minimum, '8')
             self.assertEqual(maximum, '8')
             self.assertIn('two words', command)
+            self.assertLess(command.index('--increment'), command.index('capture.hc22000'))
 
 
 class TestEntrypoints(unittest.TestCase):

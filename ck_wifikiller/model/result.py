@@ -44,32 +44,53 @@ class CrackResult(object):
         Color.p('{D}%s{W}' % self.readable_date.ljust(19))
         Color.p('  ')
 
+    @classmethod
+    def _read_results_list(cls, name):
+        '''读取 cracked 文件；损坏/非列表时返回空列表，避免崩溃。'''
+        if not os.path.exists(name):
+            return []
+        try:
+            with open(name, 'r', encoding='utf-8', errors='replace') as fid:
+                text = fid.read().strip()
+            if not text:
+                return []
+            data = loads(text)
+            if not isinstance(data, list):
+                Color.pl('{!} {O}%s is not a JSON list, ignoring previous entries{W}' % name)
+                return []
+            return [item for item in data if isinstance(item, dict)]
+        except Exception as e:
+            Color.pl('{!} error while loading %s: %s' % (name, str(e)))
+            return []
+
     def save(self):
         ''' Adds this crack result to the cracked file and saves it. '''
         name = CrackResult.get_cracked_file()
-        saved_results = []
-        if os.path.exists(name):
-            with open(name, 'r') as fid:
-                text = fid.read()
-            try:
-                saved_results = loads(text)
-            except Exception as e:
-                Color.pl('{!} error while loading %s: %s' % (name, str(e)))
+        saved_results = self._read_results_list(name)
 
         # Check for duplicates
         this_dict = self.to_dict()
-        this_dict.pop('date')
+        this_dict.pop('date', None)
         for entry in saved_results:
-            this_dict['date'] = entry.get('date')
-            if entry == this_dict:
+            compare = dict(this_dict)
+            compare['date'] = entry.get('date')
+            if entry == compare:
                 # Skip if we already saved this BSSID+ESSID+TYPE+KEY
                 Color.pl('{+} {C}%s{O} already exists in {G}%s{O}, skipping.' % (
                     self.essid, name))
                 return
 
         saved_results.append(self.to_dict())
-        with open(name, 'w') as fid:
+        # 原子写入，降低半截 JSON 风险
+        tmp_name = name + '.tmp'
+        with open(tmp_name, 'w', encoding='utf-8') as fid:
             fid.write(dumps(saved_results, indent=2))
+            fid.flush()
+            try:
+                os.fsync(fid.fileno())
+            except OSError:
+                pass
+        os.replace(tmp_name, name)
         Color.pl('{+} saved crack result to {C}%s{W} ({G}%d total{W})'
             % (name, len(saved_results)))
 
@@ -81,8 +102,7 @@ class CrackResult(object):
             Color.pl('{!} {O}file {C}%s{O} not found{W}' % name)
             return
 
-        with open(name, 'r') as fid:
-            cracked_targets = loads(fid.read())
+        cracked_targets = cls._read_results_list(name)
 
         if len(cracked_targets) == 0:
             Color.pl('{!} {R}no results found in {O}%s{W}' % name)
@@ -91,7 +111,16 @@ class CrackResult(object):
         Color.pl('\n{+} Displaying {G}%d{W} cracked target(s) from {C}%s{W}\n' % (
             len(cracked_targets), name))
 
-        results = sorted([cls.load(item) for item in cracked_targets], key=lambda x: x.date, reverse=True)
+        results = []
+        for item in cracked_targets:
+            try:
+                results.append(cls.load(item))
+            except (KeyError, TypeError, ValueError) as e:
+                Color.pl('{!} {O}skipping malformed crack entry: %s{W}' % e)
+        if not results:
+            Color.pl('{!} {R}no valid results found in {O}%s{W}' % name)
+            return
+        results = sorted(results, key=lambda x: x.date, reverse=True)
         longest_essid = max([len(result.essid or 'ESSID') for result in results])
 
         # Header
@@ -117,42 +146,43 @@ class CrackResult(object):
     @classmethod
     def load_all(cls):
         path = cls.get_cracked_file()
-        if not os.path.exists(path):
-            return []
-        with open(path, 'r') as json_file:
-            json = loads(json_file.read())
-        return json
+        return cls._read_results_list(path)
 
     @staticmethod
     def load(json):
         ''' Returns an instance of the appropriate object given a json instance '''
-        if json['type'] == 'WPA':
+        if not isinstance(json, dict):
+            raise ValueError('crack result entry must be an object')
+        rtype = json.get('type')
+        if rtype == 'WPA':
             from .wpa_result import CrackResultWPA
             result = CrackResultWPA(json['bssid'],
                                     json['essid'],
                                     json['handshake_file'],
                                     json['key'])
-        elif json['type'] == 'WEP':
+        elif rtype == 'WEP':
             from .wep_result import CrackResultWEP
             result = CrackResultWEP(json['bssid'],
                                     json['essid'],
                                     json['hex_key'],
                                     json['ascii_key'])
 
-        elif json['type'] == 'WPS':
+        elif rtype == 'WPS':
             from .wps_result import CrackResultWPS
             result = CrackResultWPS(json['bssid'],
                                     json['essid'],
                                     json['pin'],
                                     json['psk'])
 
-        elif json['type'] == 'PMKID':
+        elif rtype == 'PMKID':
             from .pmkid_result import CrackResultPMKID
             result = CrackResultPMKID(json['bssid'],
                                       json['essid'],
                                       json['pmkid_file'],
                                       json['key'])
-        result.date = json['date']
+        else:
+            raise ValueError('unknown crack result type: %r' % rtype)
+        result.date = int(json.get('date') or 0)
         result.readable_date = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(result.date))
         return result
 

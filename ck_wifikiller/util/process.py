@@ -8,7 +8,7 @@ import time
 import signal
 import os
 import shlex
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, DEVNULL
 
 from ..util.color import Color
 from ..config import Configuration
@@ -19,7 +19,8 @@ class Process(object):
 
     @staticmethod
     def devnull():
-        return open('/dev/null', 'w')
+        # 使用 DEVNULL 常量，避免每次 open('/dev/null') 泄漏文件描述符
+        return DEVNULL
 
     @staticmethod
     def call(command, cwd=None, shell=False):
@@ -41,6 +42,8 @@ class Process(object):
 
         if not cmd:
             raise ValueError('command must not be empty')
+        if not isinstance(cmd[0], str) or not cmd[0].strip():
+            raise ValueError('command executable must be a non-empty string')
 
         if Configuration.verbose > 1:
             disp = ' '.join(str(arg) for arg in cmd)
@@ -63,6 +66,8 @@ class Process(object):
 
     @staticmethod
     def exists(program: str) -> bool:
+        if not program or not isinstance(program, str) or '/' in program or '\\' in program:
+            return False
         p = Process(['which', program])
         stdout = (p.stdout() or '').strip()
         return stdout != ''
@@ -70,11 +75,13 @@ class Process(object):
     def __init__(self, command, devnull=False, stdout=PIPE, stderr=PIPE, cwd=None, bufsize=0, stdin=PIPE):
         if isinstance(command, str):
             command = shlex.split(command)
+        if not command:
+            raise ValueError('command must not be empty')
 
         self.command = command
 
         if Configuration.verbose > 1:
-            Color.pe('\n {C}[?] {W} Executing: {B}%s{W}' % ' '.join(command))
+            Color.pe('\n {C}[?] {W} Executing: {B}%s{W}' % ' '.join(str(c) for c in command))
 
         self.out = None
         self.err = None
@@ -92,7 +99,7 @@ class Process(object):
         try:
             if self.pid and self.pid.poll() is None:
                 self.interrupt()
-        except AttributeError:
+        except Exception:
             pass
 
     def stdout(self):
@@ -143,7 +150,7 @@ class Process(object):
             pid = self.pid.pid
             cmd = self.command
             if isinstance(cmd, list):
-                cmd = ' '.join(cmd)
+                cmd = ' '.join(str(c) for c in cmd)
 
             if Configuration.verbose > 1:
                 Color.pe('\n {C}[?] {W} sending interrupt to PID %d (%s)' % (pid, cmd))
@@ -155,10 +162,27 @@ class Process(object):
                 if time.time() - start_time > wait_time:
                     if Configuration.verbose > 1:
                         Color.pe('\n {C}[?] {W} killing after %.2fs' % wait_time)
-                    os.kill(pid, signal.SIGTERM)
-                    self.pid.terminate()
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+                    try:
+                        self.pid.terminate()
+                    except OSError:
+                        pass
+                    # 仍未退出则强制 SIGKILL，避免僵尸/挂死子进程
+                    time.sleep(0.2)
+                    if self.pid.poll() is None:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                        try:
+                            self.pid.kill()
+                        except OSError:
+                            pass
                     break
         except OSError as e:
-            if 'No such process' in str(e):
+            if 'No such process' in str(e) or getattr(e, 'errno', None) == 3:
                 return
             raise

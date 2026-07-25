@@ -204,16 +204,28 @@ class Configuration(object):
                     'when scanning & attacking')
 
         if args.channel:
+            from .util.validate import is_safe_channel
+            if not is_safe_channel(args.channel):
+                Color.pl('{!} {R}invalid channel:{O} %s{W}' % args.channel)
+                raise RuntimeError('Invalid channel: %r' % args.channel)
             cls.target_channel = args.channel
             Color.pl('{+} {C}option:{W} scanning for targets on channel ' +
                     '{G}%s{W}' % args.channel)
 
         if args.interface:
+            from .util.validate import is_safe_iface
+            if not is_safe_iface(args.interface):
+                Color.pl('{!} {R}invalid interface name:{O} %s{W}' % args.interface)
+                raise RuntimeError('Invalid wireless interface name: %r' % args.interface)
             cls.interface = args.interface
             Color.pl('{+} {C}option:{W} using wireless interface ' +
                     '{G}%s{W}' % args.interface)
 
         if args.target_bssid:
+            from .util.validate import is_mac_address
+            if not is_mac_address(args.target_bssid):
+                Color.pl('{!} {R}invalid BSSID:{O} %s{W}' % args.target_bssid)
+                raise RuntimeError('Invalid target BSSID: %r' % args.target_bssid)
             cls.target_bssid = args.target_bssid
             Color.pl('{+} {C}option:{W} targeting BSSID ' +
                     '{G}%s{W}' % args.target_bssid)
@@ -512,10 +524,20 @@ class Configuration(object):
 
     @classmethod
     def temp(cls, subfile=''):
-        ''' Creates and/or returns the temporary directory '''
+        ''' Creates and/or returns the temporary directory.
+
+        subfile 仅允许相对文件名（会剥离目录分量），防止路径穿越写出临时目录外。
+        无 subfile 时返回带尾部分隔符的目录路径，兼容历史 ``temp() + prefix`` 用法。
+        '''
         if cls.temp_dir is None:
             cls.temp_dir = cls.create_temp()
-        return cls.temp_dir + subfile
+        if not subfile:
+            return cls.temp_dir
+        # 禁止绝对路径与目录穿越
+        name = os.path.basename(str(subfile).replace('\\', '/'))
+        if not name or name in ('.', '..'):
+            raise ValueError('invalid temp subfile name: %r' % (subfile,))
+        return os.path.join(cls.temp_dir, name)
 
     @staticmethod
     def create_temp():
@@ -529,11 +551,16 @@ class Configuration(object):
     @classmethod
     def delete_temp(cls):
         ''' Remove temp files and folder '''
-        if cls.temp_dir is None: return
-        if os.path.exists(cls.temp_dir):
-            for f in os.listdir(cls.temp_dir):
-                os.remove(cls.temp_dir + f)
-            os.rmdir(cls.temp_dir)
+        if cls.temp_dir is None:
+            return
+        path = cls.temp_dir
+        cls.temp_dir = None
+        if os.path.isdir(path):
+            import shutil
+            try:
+                shutil.rmtree(path, ignore_errors=True)
+            except OSError:
+                pass
 
 
     @classmethod

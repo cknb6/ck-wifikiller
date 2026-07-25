@@ -6,6 +6,7 @@ from .wpa import AttackWPA
 from .wps import AttackWPS
 from .pmkid import AttackPMKID
 from ..config import Configuration
+from ..model.target import WPSState
 from ..util.color import Color
 
 class AttackAll(object):
@@ -63,9 +64,9 @@ class AttackAll(object):
         elif 'WPA' in target.encryption:
             # WPA can have multiple attack vectors:
 
-            # WPS
+            # WPS：仅在明确非 NONE 时尝试（UNKNOWN/UNLOCKED/LOCKED）
             if not Configuration.use_pmkid_only:
-                if target.wps != False and AttackWPS.can_attack_wps():
+                if target.wps != WPSState.NONE and AttackWPS.can_attack_wps():
                     # Pixie-Dust
                     if Configuration.wps_pixie:
                         attacks.append(AttackWPS(target, pixie_dust=True))
@@ -86,6 +87,7 @@ class AttackAll(object):
             Color.pl('{!} {R}Error: {O}Unable to attack: no attacks available')
             return True  # Keep attacking other targets (skip)
 
+        attack = None
         while len(attacks) > 0:
             attack = attacks.pop(0)
             try:
@@ -105,7 +107,7 @@ class AttackAll(object):
                 else:
                     return False  # Stop all attacks (exit)
 
-        if attack.success:
+        if attack is not None and getattr(attack, 'success', False) and getattr(attack, 'crack_result', None):
             attack.crack_result.save()
 
         return True  # Keep attacking other targets
@@ -116,7 +118,9 @@ class AttackAll(object):
         '''识别路由器厂商并打印针对性审计建议（不实际攻击，仅辅助排序）。'''
         try:
             from ..util.router_advisory import get_advisory
-            adv = get_advisory(target.bssid)
+            # 传入 ESSID，才能利用 SSID 指纹与运营商场景提示
+            essid = target.essid if getattr(target, 'essid_known', False) else ''
+            adv = get_advisory(target.bssid, essid or '')
         except Exception:
             return
         if not adv:

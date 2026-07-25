@@ -1,3 +1,14 @@
+ck-wifikiller (2.5.1-1) unstable; urgency=medium
+
+  * Security audit: decloak deauth used AP BSSID instead of client station MAC.
+  * Process.devnull FD leak fixed (subprocess.DEVNULL); interrupt escalates to SIGKILL.
+  * Temp path traversal blocked; delete_temp uses rmtree.
+  * Validate interface/BSSID/channel; cracked.json atomic write + corrupt-file guard.
+  * Vendor advisory now uses ESSID; hashcat options ordered before positionals.
+  * WPS state comparisons use WPSState; aireplay stdout handle closed on stop.
+
+ -- 传康Kk <1837620622@qq.com>  Sat, 25 Jul 2026 22:30:00 +0800
+
 ck-wifikiller (2.5.0-1) unstable; urgency=medium
 
   * Code audit fixes: BPF shell injection, bully stop(), vendor advisory.

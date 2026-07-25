@@ -79,8 +79,10 @@ class Aireplay(Thread, Dependency):
                                             attack_type,
                                             client_mac=client_mac,
                                             replay_file=replay_file)
+        # 显式持有文件句柄，stop/__del__ 时关闭，避免 FD 泄漏
+        self._stdout_fh = open(self.output_file, 'a')
         self.pid = Process(self.cmd,
-                stdout=open(self.output_file, 'a'),
+                stdout=self._stdout_fh,
                 stderr=Process.devnull(),
                 cwd=Configuration.temp())
         self.start()
@@ -92,6 +94,13 @@ class Aireplay(Thread, Dependency):
         ''' Stops aireplay process '''
         if hasattr(self, 'pid') and self.pid and self.pid.poll() is None:
             self.pid.interrupt()
+        fh = getattr(self, '_stdout_fh', None)
+        if fh is not None:
+            try:
+                fh.close()
+            except OSError:
+                pass
+            self._stdout_fh = None
 
     def get_output(self):
         ''' Returns stdout from aireplay process '''
@@ -353,8 +362,8 @@ class Aireplay(Thread, Dependency):
         ''' Finds the last .xor file in the directory '''
         xor = None
         for fil in os.listdir(Configuration.temp()):
-            if fil.startswith('replay_') and fil.endswith('.xor') or \
-               fil.startswith('fragment-') and fil.endswith('.xor'):
+            if ((fil.startswith('replay_') and fil.endswith('.xor')) or
+                    (fil.startswith('fragment-') and fil.endswith('.xor'))):
                 xor = fil
         return xor
 

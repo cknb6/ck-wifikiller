@@ -113,17 +113,20 @@ class Hashcat(Dependency):
 
         for base, is_mask in phases:
             for additional_arg in ([], ['--show']):
+                # 选项必须全部在位置参数（hash/wordlist/mask）之前，
+                # 避免 hashcat 把尾部 token 误当成额外字典。
                 command = [
                     'hashcat',
                     '--quiet',
                     '-m', Hashcat.MODE_WPA,
                     '--self-test-disable',
                 ]
-                command.extend(base)
+                command.extend(base[:2])  # -a 0|3
                 command.extend(Hashcat._extra_attack_args(is_mask=is_mask))
                 if Hashcat.should_use_force():
                     command.append('--force')
                 command.extend(additional_arg)
+                command.extend(base[2:])  # hash_file + wordlist/mask
                 if verbose and not additional_arg:
                     Color.pl('{+} {D}Running: {W}{P}%s{W}' % ' '.join(command))
                 proc = Process(command)
@@ -144,12 +147,12 @@ class Hashcat(Dependency):
                 '-m', Hashcat.MODE_WPA,
                 '--self-test-disable',
                 '-a', '3',
-                hash_file, mask,
             ]
             command.extend(Hashcat._extra_attack_args(is_mask=True))
             if Hashcat.should_use_force():
                 command.append('--force')
             command.extend(additional_arg)
+            command.extend([hash_file, mask])
             if verbose and not additional_arg:
                 Color.pl('{+} {D}Running: {W}{P}%s{W}' % ' '.join(command))
             proc = Process(command)

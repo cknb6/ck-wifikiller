@@ -12,7 +12,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![hashcat](https://img.shields.io/badge/hashcat--m%2022000-49A942?logo=hashicorp&logoColor=white)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.0-2.5.0-success)](https://github.com/cknb6/ck-wifikiller/releases)
+[![Release](https://img.shields.io/badge/Release-v2.5.1-2.5.1-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 </div>
 
