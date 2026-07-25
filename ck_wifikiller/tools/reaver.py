@@ -202,9 +202,12 @@ class Reaver(Attack, Dependency):
         if 'WPS pin not found' in stdout:
             raise Exception('Reaver says "WPS pin not found"')
 
-        # Running-time failure
-        if self.pixie_dust and self.running_time() > Configuration.wps_pixie_timeout:
-            raise Exception('Timeout after %d seconds' % Configuration.wps_pixie_timeout)
+        # 墙钟超时：Pixie 与 PIN 都受限（调度器按切片注入超时）
+        limit = Configuration.wps_pixie_timeout
+        if not self.pixie_dust:
+            limit = getattr(Configuration, 'wps_pin_timeout', limit)
+        if self.running_time() > limit:
+            raise Exception('Timeout after %d seconds' % limit)
 
         # WPSFail count
         self.total_wpsfails = stdout.count('WPS transaction failed')

@@ -84,18 +84,18 @@ CHINA_ROUTER_PROFILES = {
     'Ruijie/Reyee': {'segment': '企业/中小企业', 'family': '锐捷 / Reyee'},
 }
 
-# 厂商 → 攻击路径关键字（用于队列排序，输出尽量短）
+# 厂商 → 攻击路径优先级（全保留，只排序不跳过）
 VENDOR_ATTACK_PATHS = {
-    'TP-Link': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'Mercury': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'Fast': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'Xiaomi': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'Tenda': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'H3C': ['PMKID', 'handshake', 'WPS Pixie-Dust'],
-    'Huawei': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
-    'ZTE': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
-    'FiberHome': ['WPS Pixie-Dust', 'handshake', 'PMKID'],
-    'Ruijie/Reyee': ['handshake', 'PMKID', 'WPS Pixie-Dust'],
+    'TP-Link': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'Mercury': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'Fast': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'Xiaomi': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'Tenda': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'H3C': ['PMKID', 'handshake', 'WPS Pixie-Dust', 'WPS PIN'],
+    'Huawei': ['WPS Pixie-Dust', 'WPS PIN', 'handshake', 'PMKID'],
+    'ZTE': ['WPS Pixie-Dust', 'WPS PIN', 'handshake', 'PMKID'],
+    'FiberHome': ['WPS Pixie-Dust', 'WPS PIN', 'handshake', 'PMKID'],
+    'Ruijie/Reyee': ['handshake', 'PMKID', 'WPS Pixie-Dust', 'WPS PIN'],
 }
 
 

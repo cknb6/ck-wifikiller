@@ -76,14 +76,19 @@ class Configuration(object):
         # WPA variables
         cls.wpa_filter = False # Only attack WPA networks
         cls.wpa_deauth_timeout = 15 # Wait time between deauths
-        cls.wpa_attack_timeout = 500 # Wait time before failing
+        cls.wpa_attack_timeout = 60 # 单路径握手捕获上限（调度器会按切片覆盖）
         cls.wpa_handshake_dir = 'hs' # Dir to store handshakes
         cls.wpa_strip_handshake = False # Strip non-handshake packets
         cls.ignore_old_handshakes = False # Always fetch a new handshake
 
+        # 单目标总预算 / 每条攻击路径最短时长（秒）
+        # 4 条路径 × 15s = 60s；不够 min 时自动抬高总预算
+        cls.target_timeout = 60
+        cls.attack_min_slice = 15
+
         # PMKID variables
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
-        cls.pmkid_timeout = 30  # Time to wait for PMKID capture
+        cls.pmkid_timeout = 30  # 默认；调度器按切片覆盖
 
         # hashcat 离线口令审计（rules + 掩码 + 增量）
         cls.hashcat_rules = None       # 规则文件路径，如 /usr/share/hashcat/rules/best64.rule
@@ -127,9 +132,10 @@ class Configuration(object):
         cls.wps_only    = False  # ONLY use WPS attacks on non-WEP networks
         cls.use_bully   = False  # Use bully instead of reaver
         cls.wps_pixie   = True
-        cls.wps_pin     = True
+        cls.wps_pin     = True   # 默认不跳过 PIN，由时长切片控制
         cls.wps_ignore_lock = False  # Skip WPS PIN attack if AP is locked.
-        cls.wps_pixie_timeout = 300      # Seconds to wait for PIN before WPS Pixie attack fails
+        cls.wps_pixie_timeout = 60       # Pixie 墙钟；调度器按切片覆盖
+        cls.wps_pin_timeout = 60         # PIN 墙钟；调度器按切片覆盖
         cls.wps_fail_threshold = 100     # Max number of failures
         cls.wps_timeout_threshold = 100  # Max number of timeouts
 
@@ -167,6 +173,7 @@ class Configuration(object):
         cls.parse_wps_args(args)
         cls.parse_pmkid_args(args)
         cls.parse_hashcat_args(args)
+        cls.parse_schedule_args(args)
         cls.parse_encryption()
 
         # EvilTwin
@@ -433,6 +440,16 @@ class Configuration(object):
         if args.pmkid_timeout:
             cls.pmkid_timeout = args.pmkid_timeout
             Color.pl('{+} {C}option:{W} will wait {G}%d seconds{W} during {C}PMKID{W} capture' % args.pmkid_timeout)
+
+    @classmethod
+    def parse_schedule_args(cls, args):
+        '''单目标总时长 / 每路径最短切片。'''
+        if getattr(args, 'target_timeout', None):
+            cls.target_timeout = max(15, int(args.target_timeout))
+            Color.pl('{+} {C}option:{W} target budget {G}%ds{W}' % cls.target_timeout)
+        if getattr(args, 'attack_min_slice', None):
+            cls.attack_min_slice = max(15, int(args.attack_min_slice))
+            Color.pl('{+} {C}option:{W} min slice per path {G}%ds{W}' % cls.attack_min_slice)
 
     @classmethod
     def parse_hashcat_args(cls, args):

@@ -101,6 +101,24 @@ class Arguments(object):
             help=Color.s('Kill processes that conflict with Airmon/Airodump ' +
                 '(default: {G}off{W})'))
 
+        glob.add_argument('--target-timeout',
+            action='store',
+            dest='target_timeout',
+            metavar='[sec]',
+            type=int,
+            help=Color.s('Max seconds per AP across all paths '
+                '(default: {G}%d{W}; raised if needed so each path gets min slice)'
+                % self.config.target_timeout))
+
+        glob.add_argument('--attack-min',
+            action='store',
+            dest='attack_min_slice',
+            metavar='[sec]',
+            type=int,
+            help=Color.s('Minimum seconds per attack path '
+                '(default: {G}%d{W}, not below 15)'
+                % self.config.attack_min_slice))
+
         glob.add_argument('-b',
             action='store',
             dest='target_bssid',

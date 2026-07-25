@@ -110,23 +110,22 @@ class Bully(Attack, Dependency):
             # Update status
             self.pattack(self.get_status())
 
-            # Thresholds only apply to Pixie-Dust
-            if self.pixie_dust:
-                # Check if entire attack timed out.
-                if self.running_time() > Configuration.wps_pixie_timeout:
-                    self.pattack('{R}Failed: {O}Timeout after %d seconds{W}' % (
-                        Configuration.wps_pixie_timeout), newline=True)
-                    self.stop()
-                    return
+            # 墙钟超时：Pixie 与 PIN 均受限（调度器按切片注入）
+            limit = Configuration.wps_pixie_timeout
+            if not self.pixie_dust:
+                limit = getattr(Configuration, 'wps_pin_timeout', limit)
+            if self.running_time() > limit:
+                self.pattack('{R}Failed: {O}Timeout after %d seconds{W}' % limit,
+                             newline=True)
+                self.stop()
+                return
 
-                # Check if timeout threshold was breached
+            if self.pixie_dust:
                 if self.total_timeouts >= Configuration.wps_timeout_threshold:
                     self.pattack('{R}Failed: {O}More than %d Timeouts{W}' % (
                         Configuration.wps_timeout_threshold), newline=True)
                     self.stop()
                     return
-
-                # Check if WPSFail threshold was breached
                 if self.total_failures >= Configuration.wps_fail_threshold:
                     self.pattack('{R}Failed: {O}More than %d WPSFails{W}' % (
                         Configuration.wps_fail_threshold), newline=True)
