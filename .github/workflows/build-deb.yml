@@ -269,8 +269,10 @@ jobs:
                 --local-user "$SIGNING_FINGERPRINT" --digest-algo SHA256 \
                 --armor --detach-sign --output Release.gpg Release
             else
-              # 未签名：InRelease 用明文 Release 内容（apt 端用 [trusted=yes]）
-              cp Release InRelease
+              # 未签名时禁止生成伪 InRelease。
+              # 明文 InRelease 会被 apt 当 clearsign 解析，报 NOSPLIT，导致 update 失败。
+              # 客户端必须使用: deb [trusted=yes] https://... stable main
+              rm -f InRelease Release.gpg
             fi
           )
 
@@ -304,12 +306,16 @@ jobs:
               -o "Dir::Cache::archives=${apt_root}/cache/archives"
             )
             sudo apt-get "${apt_options[@]}" update
-            apt-cache "${apt_options[@]}" show ck-wifikiller >/dev/null
-
-            # 校验 Filename 不以 repo/ 开头，且 deb 文件真实存在
+            # 取最高版本记录的 Filename（multiversion 时 show 可能多段）
             filename="$(apt-cache "${apt_options[@]}" show ck-wifikiller \
-              | awk -F': ' '/^Filename:/{print $2; exit}')"
-            if [[ -z "$filename" || "$filename" == repo/* ]]; then
+              | awk -F': ' '
+                  BEGIN{ver=""}
+                  /^Package:/{if(block!=""){}}
+                  /^Version:/{v=$2}
+                  /^Filename:/{f=$2; if(v>ver){ver=v; file=f}}
+                  END{print file}
+                ')"
+            if [[ -z "$filename" || "$filename" == repo/* || "$filename" == /* ]]; then
               echo "Invalid package Filename in index: ${filename:-<empty>}" >&2
               exit 1
             fi
@@ -317,7 +323,23 @@ jobs:
               echo "Package file missing at ${repository}/${filename}" >&2
               exit 1
             fi
+            # 必须能定位到包
+            apt-cache "${apt_options[@]}" policy ck-wifikiller | tee /dev/stderr \
+              | grep -q 'ck-wifikiller'
+            # 未签名仓库不得残留伪 InRelease
+            if [[ "$SIGNED" != "true" && -e "${repository}/dists/stable/InRelease" ]]; then
+              echo "Unsigned repo must not ship InRelease (causes apt NOSPLIT)" >&2
+              exit 1
+            fi
           done
+
+          # 再做一次“可下载”校验：从 Packages 解析最新 deb 路径
+          latest_deb="$(awk -F': ' '
+            /^Version:/{v=$2}
+            /^Filename:/{f=$2; if(v>=best){best=v; file=f}}
+            END{print file}
+          ' "${repository}/dists/stable/main/binary-amd64/Packages")"
+          test -f "${repository}/${latest_deb}"
       - name: Commit APT repository
         env:
           TAG: ${{ needs.build-deb.outputs.tag }}

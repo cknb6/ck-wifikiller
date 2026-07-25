@@ -1,70 +1,106 @@
-# Kali 安装 · ck-wifikiller / Kali Install
+# Kali 安装 · ck-wifikiller
 
-## 方式 A：apt 仓库（推荐，自动更新） / apt repository (recommended)
+## 方式 A：apt 仓库（推荐）
 
-仓库由 GitHub Actions 自动构建并发布到 GitHub Pages。
-Repo is auto-built by GitHub Actions and published to GitHub Pages.
+Kali 官方源**不包含** `ck-wifikiller`。  
+若直接执行 `sudo apt install ck-wifikiller` 而未添加本仓库，会报：
+
+```text
+错误：无法定位软件包 ck-wifikiller
+```
+
+### 正确步骤
 
 ```bash
+# 1) 添加源（只做一次；trusted=yes 不可省略）
 echo "deb [trusted=yes] https://cknb6.github.io/ck-wifikiller stable main" \
   | sudo tee /etc/apt/sources.list.d/ck-wifikiller.list
-sudo apt update
-sudo apt install -y ck-wifikiller
 
-# 升级 / upgrade
-sudo apt update && sudo apt install --only-upgrade ck-wifikiller
+# 2) 更新索引
+sudo apt update
+
+# 3) 确认能看到候选包
+apt-cache policy ck-wifikiller
+
+# 4) 安装
+sudo apt install -y ck-wifikiller
 ```
 
-## 方式 B：.deb 手动安装 / Option B: manual .deb
+升级：
 
 ```bash
-# 依赖 / deps
 sudo apt update
-sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark reaver
-
-# 安装本包（从 Release 下载） / install from Release
-sudo apt install ./ck-wifikiller_*.deb
-# 或 / or
-sudo dpkg -i ck-wifikiller_*.deb && sudo apt -f install
+sudo apt install --only-upgrade ck-wifikiller
 ```
 
-## 方式 C：源码 / Option C: source
+排查：
+
+```bash
+cat /etc/apt/sources.list.d/ck-wifikiller.list
+apt-cache policy ck-wifikiller
+ls /etc/apt/sources.list.d/
+```
+
+`apt-cache policy` 成功时应出现 `https://cknb6.github.io/ck-wifikiller` 候选版本。
+
+---
+
+## 方式 B：GitHub Release `.deb`（不配源）
+
+```bash
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.2/ck-wifikiller_2.5.2_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.2_all.deb
+```
+
+若 v2.5.2 尚未生成，可用：
+
+```bash
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.1/ck-wifikiller_2.5.1_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.1_all.deb
+```
+
+---
+
+## 方式 C：源码
 
 ```bash
 git clone https://github.com/cknb6/ck-wifikiller.git
 cd ck-wifikiller
-sudo python3 setup.py install
-# 或开发模式 / or dev mode
 sudo pip3 install -e .
 ```
 
-## 运行 / Run
+依赖仍建议：
+
+```bash
+sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark reaver bully
+```
+
+---
+
+## 运行
 
 ```bash
 sudo ck-wifikiller
-sudo ck-wifikiller --recon status    # 工具链矩阵 / tool matrix
-sudo ck-wifikiller --recon kismet    # Kismet 侦察指南 / Kismet recon guide
-sudo ck-wifikiller --pmkid           # 偏 PMKID / prefer PMKID
-sudo ck-wifikiller --dict /path/to/wordlist.txt
-sudo ck-wifikiller --cn              # 国内 WiFi 智能优化 / CN optimization
-sudo ck-wifikiller --no-update       # 关闭启动更新检测 / disable update check
+sudo ck-wifikiller --recon status
+sudo ck-wifikiller --pmkid
+sudo ck-wifikiller --cn
+sudo ck-wifikiller --no-update
 ```
 
-## 构建 .deb（维护者） / Build .deb (maintainer)
+---
 
-> 维护者现已通过 **GitHub Actions** 自动构建 `.deb` 并自动发布 apt 仓库，本地无需构建。
-> Maintainers now build `.deb` and publish the apt repo via **GitHub Actions**; no local build needed.
+## 维护者：发布 apt
 
-打 tag 触发（构建 .deb → Release → apt 仓库）/ tag-triggered:
+Tag 触发 GitHub Actions：构建 `.deb` → 更新 `gh-pages` apt 仓库 → 创建 Release。
 
 ```bash
-git tag v2.5.0 && git push origin v2.5.0
+git tag v2.5.2
+git push origin v2.5.2
 ```
 
-如需本地构建（Kali/Debian）/ manual local build:
+本地构建（可选）：
 
 ```bash
 sudo apt install -y build-essential debhelper dh-python python3-all devscripts
 ./scripts/build-deb.sh
 ```
-
