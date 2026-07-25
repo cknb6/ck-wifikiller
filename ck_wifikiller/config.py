@@ -96,6 +96,9 @@ class Configuration(object):
         cls.cn_optimize = False        # 字典失败后自动追加国内常用掩码管线
         cls.cn_mask_limit = 4          # 自动掩码阶段数量（控制耗时）
 
+        # 自动更新检测（启动时查 GitHub 最新 Release，仅提示不自动安装）
+        cls.update_check = True        # 可用 --no-update 关闭
+
         # Default dictionary for cracking（优先 ck 增强词典）
         cls.cracked_file = 'cracked.txt'
         cls.wordlist = None
@@ -253,6 +256,10 @@ class Configuration(object):
         if args.verbose:
             cls.verbose = args.verbose
             Color.pl('{+} {C}option:{W} verbosity level {G}%d{W}' % args.verbose)
+
+        if hasattr(args, 'update_check') and args.update_check is False:
+            cls.update_check = False
+            Color.pl('{+} {C}option:{W} startup update check {R}disabled{W}')
 
         if args.kill_conflicting_processes:
             cls.kill_conflicting_processes = True

@@ -27,6 +27,9 @@ class CKWifiKiller(object):
         Configuration.initialize(load_interface=False)
 
         if not self._want_help:
+            self._check_update()
+
+        if not self._want_help:
             self._start_session_log()
 
         if os.getuid() != 0 and not Configuration.recon_mode:
@@ -49,6 +52,16 @@ class CKWifiKiller(object):
                 Color.pl('{+} {D}升级反馈可填 feedback.md · Issues: github.com/cknb6/ck-wifikiller/issues{W}')
         except Exception:
             self._session = None
+
+    def _check_update(self):
+        '''启动时检查 GitHub 最新 Release（非阻塞，仅提示）。'''
+        if not getattr(Configuration, 'update_check', True):
+            return
+        try:
+            from .util.update_check import run_update_check
+            run_update_check(Configuration.version)
+        except Exception:
+            pass
 
     def start(self):
         from .model.result import CrackResult

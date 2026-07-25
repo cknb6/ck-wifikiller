@@ -48,6 +48,11 @@ class Arguments(object):
             help=Color.s('Shows more options ({C}-h -v{W}). Prints commands and ' +
                 'outputs. (default: {G}quiet{W})'))
 
+        glob.add_argument('--no-update',
+            action='store_false',
+            dest='update_check',
+            help=Color.s('Skip startup update check against GitHub Releases'))
+
         glob.add_argument('-i',
             action='store',
             dest='interface',
