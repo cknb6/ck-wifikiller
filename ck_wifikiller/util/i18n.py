@@ -264,6 +264,46 @@ _S: dict[str, tuple[str, str]] = {
     ),
 
     # monitor / airmon common
+    'mon.looking': (
+        'looking for wireless interfaces...',
+        '正在查找无线网卡...',
+    ),
+    'mon.checking': (
+        'checking airmon-ng...',
+        '正在检查 airmon-ng...',
+    ),
+    'mon.none': (
+        'no wireless interfaces found',
+        '未发现无线网卡',
+    ),
+    'mon.none_hint': (
+        'connect a Wi-Fi adapter and retry',
+        '请插入无线网卡后重试',
+    ),
+    'mon.auto_one': (
+        'only one interface, auto-using %s',
+        '仅一块网卡，自动使用 %s',
+    ),
+    'mon.use_existing': (
+        'using %s (already monitor mode)',
+        '使用 %s（已是监听模式）',
+    ),
+    'mon.multi_mon': (
+        'multiple monitor interfaces, choose one:',
+        '检测到多块监听网卡，请选择:',
+    ),
+    'mon.select': (
+        'select wireless interface (1-%d): ',
+        '选择无线网卡 (1-%d): ',
+    ),
+    'mon.selected': (
+        'selected %s',
+        '已选择 %s',
+    ),
+    'mon.invalid': (
+        'invalid choice, try again',
+        '选择无效，请重新输入',
+    ),
     'mon.enable': (
         'monitor mode on %s ... %s',
         '开启监听模式 %s ... %s',

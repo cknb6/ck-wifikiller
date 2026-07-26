@@ -78,9 +78,15 @@ class Airmon(Dependency):
             Color.pl(' {G}%d{W}. %s' % (idx, iface))
 
     def get(self, index):
-        ''' Gets interface at index (starts at 1) '''
-        if type(index) is str:
+        ''' Gets interface at index (starts at 1). 非法序号返回 None。'''
+        try:
+            if isinstance(index, str):
+                index = int(index.strip())
             index = int(index)
+        except (TypeError, ValueError):
+            return None
+        if index < 1 or index > len(self.interfaces):
+            return None
         return self.interfaces[index - 1]
 
 
@@ -273,57 +279,98 @@ class Airmon(Dependency):
 
     @staticmethod
     def ask():
+        '''选择无线网卡并进入监听模式。
+
+        规则（用户要求）:
+          - 只有 1 块可用网卡 → 自动使用，不询问
+          - 多块网卡 → 列出菜单，让用户选 1..N
+          - 已指定 -i → 外层 config 直接跳过本函数
         '''
-        Asks user to define which wireless interface to use.
-        Does not ask if:
-            1. There is already an interface in monitor mode, or
-            2. There is only one wireless interface (automatically selected).
-        Puts selected device into Monitor Mode.
-        '''
+        from ..util.i18n import t
 
         Airmon.terminate_conflicting_processes()
 
-        Color.p('\n{+} Looking for {C}wireless interfaces{W}...')
+        Color.p('\n{+} %s' % t('mon.looking'))
         monitor_interfaces = Iwconfig.get_interfaces(mode='Monitor')
+
+        # ---------- 已在 monitor：仅一块则直接用 ----------
         if len(monitor_interfaces) == 1:
-            # Assume we're using the device already in montior mode
             iface = monitor_interfaces[0]
             Color.clear_entire_line()
-            Color.pl('{+} Using {G}%s{W} already in monitor mode' % iface);
+            Color.pl('{+} %s' % t('mon.use_existing', iface))
             Airmon.base_interface = None
             return iface
 
+        # ---------- 多块 monitor：让用户选 ----------
+        if len(monitor_interfaces) > 1:
+            Color.clear_entire_line()
+            Color.pl('{+} %s' % t('mon.multi_mon'))
+            for idx, name in enumerate(monitor_interfaces, start=1):
+                Color.pl(' {G}%d{W}. {C}%s{W}' % (idx, name))
+            chosen = Airmon._prompt_index(len(monitor_interfaces), t)
+            iface = monitor_interfaces[chosen - 1]
+            Color.pl('{+} %s' % t('mon.selected', iface))
+            Airmon.base_interface = None
+            return iface
+
+        # ---------- 无 monitor：查 airmon-ng 物理网卡 ----------
         Color.clear_entire_line()
-        Color.p('{+} Checking {C}airmon-ng{W}...')
+        Color.p('{+} %s' % t('mon.checking'))
         a = Airmon()
         count = len(a.interfaces)
         if count == 0:
-            # No interfaces found
-            Color.pl('\n{!} {O}airmon-ng did not find {R}any{O} wireless interfaces')
-            Color.pl('{!} {O}Make sure your wireless device is connected')
-            Color.pl('{!} {O}See {C}http://www.aircrack-ng.org/doku.php?id=airmon-ng{O} for more info{W}')
+            Color.pl('\n{!} {O}%s{W}' % t('mon.none'))
+            Color.pl('{!} {O}%s{W}' % t('mon.none_hint'))
             raise Exception('airmon-ng did not find any wireless interfaces')
 
         Color.clear_entire_line()
         a.print_menu()
-
         Color.pl('')
 
         if count == 1:
-            # Only one interface, assume this is the one to use
+            # 单网卡：自动选，不 raw_input
             choice = 1
+            Color.pl('{+} %s' % t('mon.auto_one', a.interfaces[0].interface))
         else:
-            # Multiple interfaces found
-            question = Color.s('{+} Select wireless interface ({G}1-%d{W}): ' % (count))
-            choice = raw_input(question)
+            # 多网卡：用户选
+            choice = Airmon._prompt_index(count, t)
 
-        iface = a.get(choice)
+        iface_obj = a.get(choice)
+        if iface_obj is None:
+            raise Exception('invalid interface selection')
 
-        if a.get(choice).interface in monitor_interfaces:
-            Color.pl('{+} {G}%s{W} is already in monitor mode' % iface.interface)
-        else:
-            iface.interface = Airmon.start(iface)
-        return iface.interface
+        mon_names = set(monitor_interfaces)
+        if iface_obj.interface in mon_names:
+            Color.pl('{+} %s' % t('mon.use_existing', iface_obj.interface))
+            return iface_obj.interface
+
+        mon_name = Airmon.start(iface_obj)
+        return mon_name
+
+    @staticmethod
+    def _prompt_index(count, t=None):
+        '''循环询问 1..count，非法则重试；Ctrl+C 抛出。'''
+        if t is None:
+            from ..util.i18n import t as _t
+            t = _t
+        while True:
+            try:
+                question = Color.s('{+} ' + t('mon.select', count))
+                raw = raw_input(question).strip()
+            except KeyboardInterrupt:
+                Color.pl('')
+                raise
+            if not raw:
+                Color.pl('{!} {O}%s{W}' % t('mon.invalid'))
+                continue
+            try:
+                n = int(raw)
+            except ValueError:
+                Color.pl('{!} {O}%s{W}' % t('mon.invalid'))
+                continue
+            if 1 <= n <= count:
+                return n
+            Color.pl('{!} {O}%s{W}' % t('mon.invalid'))
 
 
     @staticmethod
