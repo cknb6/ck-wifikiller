@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""统一 deauth 入口：aireplay + Scapy 双通道。
+"""统一 deauth 入口：Scapy（主）+ aireplay（辅）。
 
 默认策略 (deauth_engine=auto)：
-  1) 有 scapy → 先 Scapy 高密度双向 deauth/disassoc 突发
-  2) 再 aireplay-ng -0 补一发（兼容旧流程）
-  3) 无 scapy → 仅 aireplay，且提高默认包数
+  1) 有 scapy → 按 MT7921U 参考脚本突发（主注入）
+  2) 再 aireplay-ng -0 轻量补刀（兼容无 scapy / 旧驱动）
+  3) 无 scapy → 仅 aireplay
+
+Scapy 帧模板/reason/burst 见 tools/scapy_deauth.py
+（对齐 wifi-crack-kali/自动攻击/auto_attack.py 发送侧）。
 
 仅限授权测试；MFP(802.11w) 目标无法靠 deauth 踢站。
 """

@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.8-1) unstable; urgency=medium
+
+  * Scapy deauth send path aligned with MT7921U auto_attack.py:
+    reason 7/1/8, burst list sendp(inter=0.003), 4 rounds x 64 frames.
+  * Prefer Scapy burst as primary inject; aireplay remains light fallback.
+
+ -- 传康Kk <1837620622@qq.com>  Sun, 26 Jul 2026 17:00:00 +0800
+
 ck-wifikiller (2.5.7-1) unstable; urgency=medium
 
   * Deauth: Scapy bidirectional deauth/disassoc burst + aireplay dual channel.

@@ -53,10 +53,13 @@ class Configuration(object):
         cls.num_deauths = 8
         # deauth 引擎：auto=有 scapy 则双通道，both/scapy/aireplay
         cls.deauth_engine = 'auto'
-        # Scapy 突发：每方向帧数 / 帧间隔(s) / 802.11 reason
-        cls.scapy_deauth_count = 32
-        cls.scapy_deauth_inter = 0.002
-        cls.scapy_deauth_reason = 7
+        # Scapy 突发（对齐 auto_attack.py / MT7921U）:
+        #   0 = 自动（精准每向 16、广播每向 32）；>0 强制每向份数
+        #   rounds=4 → 64×4=256 帧/次爆发；inter=0.003
+        cls.scapy_deauth_count = 0
+        cls.scapy_deauth_rounds = 4
+        cls.scapy_deauth_inter = 0.003
+
 
         cls.encryption_filter = ['WEP', 'WPA', 'WPS']
 

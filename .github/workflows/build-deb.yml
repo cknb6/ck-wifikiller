@@ -156,7 +156,7 @@ jobs:
           # 合并历史 deb：从当前线上 pool 拉取旧版本（失败则仅本次版本）
           mkdir -p site/pool/main/c/ck-wifikiller
           # 合并历史 deb（从 Releases 拉取，失败则跳过）
-          for ver in 2.5.0 2.5.1 2.5.2 2.5.3 2.5.4 2.5.5 2.5.6; do
+          for ver in 2.5.0 2.5.1 2.5.2 2.5.3 2.5.4 2.5.5 2.5.6 2.5.7; do
             url="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${ver}/ck-wifikiller_${ver}_all.deb"
             dest="site/pool/main/c/ck-wifikiller/ck-wifikiller_${ver}_all.deb"
             if curl -fsSL "$url" -o "$dest"; then
