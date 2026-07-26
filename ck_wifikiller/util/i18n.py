@@ -189,9 +189,57 @@ _S: dict[str, tuple[str, str]] = {
         'cracking with %s ...',
         '爆破中 %s ...',
     ),
+    'wpa.crack_bg': (
+        'full dict %s → new window / background (no slice cut-off)',
+        '全量字典 %s → 独立窗口/后台（不受切片截断）',
+    ),
     'wpa.fail': (
         'not in wordlist',
         '字典未命中',
+    ),
+    'bg.spawned': (
+        'bg crack %s via %s — script %s',
+        '后台爆破 %s（%s）— 脚本 %s',
+    ),
+    'bg.nohup_log': (
+        'no display: log %s',
+        '无图形界面：日志 %s',
+    ),
+    'bg.no_tool': (
+        'no hashcat/aircrack for background crack',
+        '无 hashcat/aircrack，无法后台爆破',
+    ),
+    'bg.summary': (
+        '%d background crack job(s) still running:',
+        '仍有 %d 个后台爆破任务：',
+    ),
+    'bg.summary_hint': (
+        'check hs/bg_*.key or cracked.txt when windows finish',
+        '窗口跑完后查看 hs/bg_*.key 或 cracked.txt',
+    ),
+    'cap.none_valid': (
+        '%d capture(s) found but none valid for crack',
+        '发现 %d 份捕获但均无效，跳过爆破',
+    ),
+    'cap.pick': (
+        '%d captures → use valid/latest %s',
+        '%d 份捕获 → 选用有效/最新 %s',
+    ),
+    'cap.same_reuse': (
+        'same capture already saved: %s',
+        '内容相同，复用已有: %s',
+    ),
+    'cap.newest': (
+        'different capture saved; crack will use newest valid: %s',
+        '内容不同已另存；爆破用最新有效: %s',
+    ),
+    'cap.invalid_skip_save': (
+        'capture invalid, not saved',
+        '捕获无效，未保存',
+    ),
+    'cap.invalid_no_crack': (
+        'no valid hash/handshake to crack',
+        '无有效哈希/握手，不爆破',
     ),
     'wpa.ok': (
         'cracked: %s',

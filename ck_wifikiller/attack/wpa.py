@@ -47,6 +47,18 @@ class AttackWPA(Attack):
             self.success = False
             return self.success
 
+        # 爆破前再选一次：同 AP 多包 → 有效优先，不同取最新
+        from ..util.capture_select import select_handshake_cap, is_valid_handshake_cap
+        best_cap = select_handshake_cap(
+            Configuration.wpa_handshake_dir, handshake.bssid, handshake.essid)
+        if best_cap:
+            handshake.capfile = best_cap
+        if not is_valid_handshake_cap(
+                handshake.capfile, bssid=handshake.bssid, essid=handshake.essid):
+            Color.pl('{!} {R}%s{W}' % t('cap.invalid_no_crack'))
+            self.success = False
+            return False
+
         # Analyze handshake
         Color.pl('\n{+} %s' % t('wpa.analyze'))
         handshake.analyze()
@@ -63,9 +75,30 @@ class AttackWPA(Attack):
             return False
 
         wl_name = os.path.split(Configuration.wordlist)[-1]
-        Color.pl('\n{+} {C}%s{W}' % t('wpa.crack', wl_name))
 
-        # 优先 hashcat -m 22000（认 --runtime / path_deadline），失败再 aircrack（墙钟 kill）
+        # 1) potfile 瞬时命中
+        from ..tools.bg_crack import BgCrack
+        key = BgCrack.potfile_check_handshake(handshake)
+        if key:
+            Color.pl('{+} {G}%s{W}\n' % t('wpa.ok', key))
+            self.crack_result = CrackResultWPA(
+                handshake.bssid, handshake.essid, handshake.capfile, key)
+            self.crack_result.dump()
+            self.success = True
+            return self.success
+
+        # 2) 默认：独立窗口/后台跑全量字典（不被切片截成 2~3%）
+        if BgCrack.enabled():
+            Color.pl('\n{+} {C}%s{W}' % t('wpa.crack_bg', wl_name))
+            meta = BgCrack.spawn_handshake(handshake)
+            if meta is not None:
+                # 旁路爆破进行中；主流程继续下一路径/目标
+                self.success = False
+                return False
+            # 启动失败则回落前台
+
+        # 3) 前台爆破（--no-bg-crack 或后台启动失败）
+        Color.pl('\n{+} {C}%s{W}' % t('wpa.crack', wl_name))
         key = self._crack_handshake(handshake)
         if key is None:
             Color.pl('{!} {R}%s{W}' % t('wpa.fail'))
@@ -257,33 +290,51 @@ class AttackWPA(Attack):
             return handshake
 
     def load_handshake(self, bssid, essid):
+        '''多份握手时：只认有效；相同取其一；不同取最新。'''
+        from ..util.capture_select import select_handshake_cap, list_handshake_caps
+
         if not os.path.exists(Configuration.wpa_handshake_dir):
             return None
 
-        if essid:
-            essid_safe = re.escape(re.sub('[^a-zA-Z0-9]', '', essid))
-        else:
-            essid_safe = '[a-zA-Z0-9]+'
-        bssid_safe = re.escape(bssid.replace(':', '-'))
-        date = r'\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}'
-        get_filename = re.compile(r'handshake_%s_%s_%s\.cap' % (essid_safe, bssid_safe, date))
-
-        for filename in os.listdir(Configuration.wpa_handshake_dir):
-            cap_filename = os.path.join(Configuration.wpa_handshake_dir, filename)
-            if os.path.isfile(cap_filename) and re.match(get_filename, filename):
-                return Handshake(capfile=cap_filename, bssid=bssid, essid=essid)
-
-        return None
+        all_caps = list_handshake_caps(Configuration.wpa_handshake_dir, bssid, essid)
+        best = select_handshake_cap(Configuration.wpa_handshake_dir, bssid, essid)
+        if best is None:
+            if all_caps:
+                Color.pl('{!} {O}%s{W}' % t('cap.none_valid', len(all_caps)))
+            return None
+        if len(all_caps) > 1:
+            Color.pl('{+} {D}%s{W}' % t(
+                'cap.pick', len(all_caps), os.path.basename(best)))
+        return Handshake(capfile=best, bssid=bssid, essid=essid)
 
     def save_handshake(self, handshake):
         '''
             Saves a copy of the handshake file to hs/
-            Args:
-                handshake - Instance of Handshake containing bssid, essid, capfile
+            相同内容不重复存；无效握手不存。
         '''
-        # Create handshake dir
+        from ..util.capture_select import (
+            is_valid_handshake_cap, list_handshake_caps,
+            file_fingerprint, select_handshake_cap,
+        )
+
         if not os.path.exists(Configuration.wpa_handshake_dir):
             os.makedirs(Configuration.wpa_handshake_dir)
+
+        # 只存有效握手
+        if not is_valid_handshake_cap(
+                handshake.capfile, bssid=handshake.bssid, essid=handshake.essid):
+            Color.pl('{!} {O}%s{W}' % t('cap.invalid_skip_save'))
+            return
+
+        existing = list_handshake_caps(
+            Configuration.wpa_handshake_dir, handshake.bssid, handshake.essid)
+        new_fp = file_fingerprint(handshake.capfile)
+        for p in existing:
+            if file_fingerprint(p) == new_fp:
+                # 内容相同 → 复用已有，不另存
+                handshake.capfile = p
+                Color.pl('{+} {D}%s{W}' % t('cap.same_reuse', os.path.basename(p)))
+                return
 
         # Generate filesystem-safe filename from bssid, essid and date
         if handshake.essid and type(handshake.essid) is str:
@@ -304,8 +355,12 @@ class AttackWPA(Attack):
             copy(handshake.capfile, cap_filename)
             Color.pl('{G}saved{W}')
 
-        # Update handshake to use the stored handshake file for future operations
         handshake.capfile = cap_filename
+        # 若同 BSSID 另有旧有效包，提示将按最新有效爆破
+        best = select_handshake_cap(
+            Configuration.wpa_handshake_dir, handshake.bssid, handshake.essid)
+        if best and os.path.abspath(best) == os.path.abspath(cap_filename) and len(existing) >= 1:
+            Color.pl('{+} {D}%s{W}' % t('cap.newest', os.path.basename(best)))
 
 
     @staticmethod

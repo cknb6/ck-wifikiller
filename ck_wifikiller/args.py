@@ -114,7 +114,7 @@ class Arguments(object):
             metavar='[sec]',
             type=int,
             help=Color.s('Max seconds per AP across all paths '
-                '(default: {G}%d{W}; weighted slices; raised so each path gets min slice)'
+                '(default: {G}%d{W}; raised so PMKID≥60s / others≥45s)'
                 % self.config.target_timeout))
 
         glob.add_argument('--attack-min',
@@ -123,8 +123,14 @@ class Arguments(object):
             metavar='[sec]',
             type=int,
             help=Color.s('Minimum seconds per attack path '
-                '(default: {G}%d{W}, not below 15)'
+                '(default: {G}%d{W}; PMKID floor 60s, others floor 45s)'
                 % self.config.attack_min_slice))
+
+        glob.add_argument('--no-bg-crack',
+            action='store_true',
+            dest='no_bg_crack',
+            help=Color.s('Disable new-window/background full-dict crack '
+                '(default: {G}spawn independent crack after capture{W})'))
 
         glob.add_argument('-b',
             action='store',

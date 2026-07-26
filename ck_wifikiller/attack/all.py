@@ -65,6 +65,13 @@ class AttackAll(object):
             if not should_continue:
                 break
 
+        # 汇总独立窗口/后台爆破任务
+        try:
+            from ..tools.bg_crack import BgCrack
+            BgCrack.summarize()
+        except Exception:
+            pass
+
         return attacked_targets
 
     # 路径权重：捕获向（PMKID/握手）略高，PIN 仅探测可略低
@@ -76,13 +83,28 @@ class AttackAll(object):
         'wep': 1.0,
     }
 
+    # 路径硬性下限（秒）：PMKID ≥60，其余 ≥45；再与 attack_min_slice 取 max
+    PATH_MIN_SLICE = {
+        'pmkid': 60,
+        'wps_pixie': 45,
+        'wps_pin': 45,
+        'handshake': 45,
+        'wep': 45,
+    }
+
+    @classmethod
+    def _path_min_slice(cls, name: str) -> int:
+        '''单路径最短秒数。'''
+        user = int(getattr(Configuration, 'attack_min_slice', 45) or 45)
+        floor = int(cls.PATH_MIN_SLICE.get(name, 45))
+        return max(floor, user)
+
     @classmethod
     def attack_single(cls, target, targets_remaining):
         '''
         - 按品牌排序攻击路径（不默认跳过 PIN / Pixie / PMKID）
-        - 每条路径至少 attack_min_slice 秒（默认 15）
-        - 单目标预算 target_timeout（默认 90；不够则抬到 n×min）
-        - 切片内捕获优先（满切片）；爆破用抓到后的 path_deadline 剩余墙钟
+        - PMKID 至少 60s，其它路径至少 45s（不够则抬高总预算）
+        - 切片内只做捕获；字典全量爆破默认丢独立窗口/后台
         - 握手 deauth 间隔与捕获窗口联动，开局即 deauth
         '''
         cls._print_target_brief(target)
@@ -161,34 +183,35 @@ class AttackAll(object):
 
     @classmethod
     def _allocate_time_slices(cls, names_or_n) -> list[int]:
-        '''按权重分配目标时长；每人至少 min_slice（默认 15s）。
+        '''按权重分配目标时长；每人至少路径下限（PMKID 60 / 其它 45）。
 
         兼容旧调用：传入 int 路径数 → 均分；传入 names 列表 → 加权。
         '''
         if isinstance(names_or_n, int):
             names = ['p%d' % i for i in range(names_or_n)]
             weights = [1.0] * names_or_n
+            mins = [cls._path_min_slice('handshake') for _ in names]
         else:
             names = list(names_or_n)
             weights = [
                 float(cls.PATH_WEIGHTS.get(n, 1.0)) for n in names
             ]
+            mins = [cls._path_min_slice(n) for n in names]
         n = len(names)
         if n <= 0:
             return []
-        min_s = max(15, int(getattr(Configuration, 'attack_min_slice', 15) or 15))
-        total = int(getattr(Configuration, 'target_timeout', 90) or 90)
-        # 保证每条路径至少 min_s，不足则抬高总预算
-        total = max(total, n * min_s)
+
+        min_total = sum(mins)
+        total = int(getattr(Configuration, 'target_timeout', 210) or 210)
+        # 保证每条路径至少各自下限，不足则抬高总预算
+        total = max(total, min_total)
 
         wsum = sum(weights) or float(n)
-        # 先按权重浮点分，再修正到整数且每人 >= min_s、总和 = total
         raw = [total * (w / wsum) for w in weights]
-        slices = [max(min_s, int(x)) for x in raw]
+        slices = [max(mins[i], int(raw[i])) for i in range(n)]
         # 总和可能偏大或偏小
         diff = total - sum(slices)
         if diff != 0:
-            # 按权重从大到小调整 1s
             order = sorted(range(n), key=lambda i: weights[i], reverse=(diff > 0))
             idx = 0
             guard = 0
@@ -197,7 +220,7 @@ class AttackAll(object):
                 if diff > 0:
                     slices[i] += 1
                     diff -= 1
-                elif slices[i] > min_s:
+                elif slices[i] > mins[i]:
                     slices[i] -= 1
                     diff += 1
                 idx += 1
@@ -208,14 +231,13 @@ class AttackAll(object):
     def _apply_timeouts(name: str, seconds: int, path_deadline: float | None = None) -> None:
         '''切片秒数写入各工具超时。
 
-        设计（v2.5.6）：
-        - 在线捕获用满切片（不预扣 3s 假爆破）
-        - 爆破只花「抓到后 path_deadline 剩余墙钟」（hashcat --runtime / aircrack kill）
-        - 握手 deauth 间隔 = clamp(3, 8, slice//3)，保证切片内至少 1～2 次 deauth
+        设计（v2.5.18）：
+        - 在线捕获用满切片
+        - 字典全量爆破默认独立窗口（BgCrack），不再靠 path_deadline 截断字典
+        - 握手 deauth 间隔 = clamp(3, 12, slice//4)
         '''
         seconds = max(1, int(seconds))
         Configuration.path_deadline = path_deadline
-        # 不再预留 crack_budget 缩短捕获；爆破看墙钟剩余
         Configuration.hashcat_runtime = 0
 
         if name == 'pmkid':
@@ -227,8 +249,8 @@ class AttackAll(object):
             Configuration.wps_pixie_timeout = seconds
         elif name == 'handshake':
             Configuration.wpa_attack_timeout = seconds
-            # deauth 间隔必须 < 捕获窗口，否则切片内零 deauth
-            Configuration.wpa_deauth_timeout = max(3, min(8, max(3, seconds // 3)))
+            # deauth 间隔必须 < 捕获窗口，切片内至少 1～2 次
+            Configuration.wpa_deauth_timeout = max(3, min(12, max(3, seconds // 4)))
         elif name == 'wep':
             Configuration.wep_timeout = seconds
 

@@ -86,24 +86,26 @@ class Configuration(object):
         # WPA variables
         cls.wpa_filter = False # Only attack WPA networks
         cls.wpa_deauth_timeout = 5  # 默认 5s；调度器按切片联动覆盖（须 < 捕获窗口）
-        cls.wpa_attack_timeout = 60 # 单路径握手捕获上限（调度器会按切片覆盖）
+        cls.wpa_attack_timeout = 45 # 单路径握手捕获下限 45s（调度器按切片覆盖）
         cls.wpa_handshake_dir = 'hs' # Dir to store handshakes
         cls.wpa_strip_handshake = False # Strip non-handshake packets
         cls.ignore_old_handshakes = False # Always fetch a new handshake
 
         # 单目标总预算 / 每条攻击路径最短时长（秒）
-        # 默认 90s：4 路径加权后约 20–30s/路，捕获能跑满切片
-        # 不够 min 时自动抬高总预算（n × attack_min_slice）
-        cls.target_timeout = 90
-        cls.attack_min_slice = 15
-        # 闭环：--auto 扫完即打全部；path_deadline 给爆破墙钟
+        # PMKID ≥60s，其它 ≥45s；4 路径抬高约 60+45*3=195，默认总预算 210
+        # 不够各自下限时自动抬高总预算
+        cls.target_timeout = 210
+        cls.attack_min_slice = 45
+        # 闭环：--auto 扫完即打全部；path_deadline 只约束捕获
         cls.auto_attack = False
         cls.path_deadline = None  # float unix ts，当前路径墙钟截止
         cls.hashcat_runtime = 0   # 0=跟 path_deadline；>0 显式秒数
+        # 捕获后字典默认独立窗口/后台全量跑（--no-bg-crack 可关）
+        cls.bg_crack = True
 
         # PMKID variables
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
-        cls.pmkid_timeout = 30  # 默认；调度器按切片覆盖
+        cls.pmkid_timeout = 60  # 默认；调度器按切片覆盖（下限 60）
 
         # hashcat 离线口令审计（rules + 掩码 + 增量）
         cls.hashcat_rules = None       # 规则文件路径，如 /usr/share/hashcat/rules/best64.rule
@@ -481,11 +483,17 @@ class Configuration(object):
     def parse_schedule_args(cls, args):
         '''单目标总时长 / 每路径最短切片。'''
         if getattr(args, 'target_timeout', None):
-            cls.target_timeout = max(15, int(args.target_timeout))
+            cls.target_timeout = max(45, int(args.target_timeout))
             Color.pl('{+} {C}option:{W} target budget {G}%ds{W}' % cls.target_timeout)
         if getattr(args, 'attack_min_slice', None):
-            cls.attack_min_slice = max(15, int(args.attack_min_slice))
-            Color.pl('{+} {C}option:{W} min slice per path {G}%ds{W}' % cls.attack_min_slice)
+            cls.attack_min_slice = max(45, int(args.attack_min_slice))
+            Color.pl('{+} {C}option:{W} min slice per path {G}%ds{W} '
+                     '(PMKID floor 60s)' % cls.attack_min_slice)
+        if getattr(args, 'no_bg_crack', False):
+            cls.bg_crack = False
+            Color.pl('{+} {C}option:{W} background crack window {O}disabled{W}')
+        elif getattr(args, 'bg_crack', None) is False:
+            cls.bg_crack = False
 
     @classmethod
     def parse_hashcat_args(cls, args):

@@ -11,55 +11,55 @@ from ck_wifikiller.tools.hashcat import Hashcat
 
 
 class TestAttackSchedule(unittest.TestCase):
-    def test_min_slice_at_least_15(self):
-        with patch.object(Configuration, 'target_timeout', 60, create=True), \
-                patch.object(Configuration, 'attack_min_slice', 15, create=True):
-            slices = AttackAll._allocate_time_slices(4)
-        self.assertEqual(len(slices), 4)
-        self.assertTrue(all(s >= 15 for s in slices))
-        self.assertEqual(sum(slices), 60)
+    def test_path_mins_pmkid_60_others_45(self):
+        names = ['pmkid', 'wps_pixie', 'wps_pin', 'handshake']
+        with patch.object(Configuration, 'target_timeout', 100, create=True), \
+                patch.object(Configuration, 'attack_min_slice', 45, create=True):
+            slices = AttackAll._allocate_time_slices(names)
+        by = dict(zip(names, slices))
+        self.assertGreaterEqual(by['pmkid'], 60)
+        self.assertGreaterEqual(by['wps_pixie'], 45)
+        self.assertGreaterEqual(by['wps_pin'], 45)
+        self.assertGreaterEqual(by['handshake'], 45)
+        # 100 < 60+45*3 → 抬高到下限和
+        self.assertEqual(sum(slices), 60 + 45 * 3)
 
     def test_expands_budget_when_needed(self):
         with patch.object(Configuration, 'target_timeout', 40, create=True), \
-                patch.object(Configuration, 'attack_min_slice', 15, create=True):
-            slices = AttackAll._allocate_time_slices(4)
-        # 4*15=60 > 40 → 抬高
-        self.assertEqual(sum(slices), 60)
-        self.assertTrue(all(s >= 15 for s in slices))
-
-    def test_two_paths_split_60(self):
-        with patch.object(Configuration, 'target_timeout', 60, create=True), \
-                patch.object(Configuration, 'attack_min_slice', 15, create=True):
+                patch.object(Configuration, 'attack_min_slice', 45, create=True):
             slices = AttackAll._allocate_time_slices(2)
-        self.assertEqual(slices, [30, 30])
+        self.assertEqual(sum(slices), 90)
+        self.assertTrue(all(s >= 45 for s in slices))
+
+    def test_two_paths_split_equal_mins(self):
+        with patch.object(Configuration, 'target_timeout', 90, create=True), \
+                patch.object(Configuration, 'attack_min_slice', 45, create=True):
+            slices = AttackAll._allocate_time_slices(2)
+        self.assertEqual(slices, [45, 45])
 
     def test_weighted_paths_prefer_capture(self):
-        '''PMKID/握手权重大于 PIN，总和与下限仍成立。'''
         names = ['pmkid', 'wps_pixie', 'wps_pin', 'handshake']
-        with patch.object(Configuration, 'target_timeout', 90, create=True), \
-                patch.object(Configuration, 'attack_min_slice', 15, create=True):
+        with patch.object(Configuration, 'target_timeout', 210, create=True), \
+                patch.object(Configuration, 'attack_min_slice', 45, create=True):
             slices = AttackAll._allocate_time_slices(names)
         self.assertEqual(len(slices), 4)
-        self.assertEqual(sum(slices), 90)
-        self.assertTrue(all(s >= 15 for s in slices))
+        self.assertEqual(sum(slices), 210)
         by = dict(zip(names, slices))
-        # 捕获向路径应 >= PIN
+        self.assertGreaterEqual(by['pmkid'], 60)
         self.assertGreaterEqual(by['handshake'], by['wps_pin'])
         self.assertGreaterEqual(by['pmkid'], by['wps_pin'])
 
     def test_apply_timeouts_capture_full_slice(self):
-        '''捕获用满切片，不预扣假爆破；握手 deauth < 捕获。'''
-        deadline = time.time() + 30
-        AttackAll._apply_timeouts('pmkid', 30, deadline)
+        deadline = time.time() + 60
+        AttackAll._apply_timeouts('pmkid', 60, deadline)
         self.assertEqual(Configuration.path_deadline, deadline)
-        self.assertEqual(Configuration.pmkid_timeout, 30)
+        self.assertEqual(Configuration.pmkid_timeout, 60)
         self.assertEqual(Configuration.hashcat_runtime, 0)
 
-        AttackAll._apply_timeouts('handshake', 15, deadline)
-        self.assertEqual(Configuration.wpa_attack_timeout, 15)
+        AttackAll._apply_timeouts('handshake', 45, deadline)
+        self.assertEqual(Configuration.wpa_attack_timeout, 45)
         self.assertLess(Configuration.wpa_deauth_timeout, Configuration.wpa_attack_timeout)
         self.assertGreaterEqual(Configuration.wpa_deauth_timeout, 3)
-        self.assertLessEqual(Configuration.wpa_deauth_timeout, 8)
 
     def test_hashcat_runtime_from_deadline(self):
         Configuration.path_deadline = time.time() + 12

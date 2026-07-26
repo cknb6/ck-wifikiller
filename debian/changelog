@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.18-1) unstable; urgency=medium
+
+  * Path mins: PMKID ≥60s, others ≥45s (target budget default 210s).
+  * Full-dict crack in new terminal/background (no 2~3% slice cut-off).
+  * Valid-hash only; multi-capture: same→one, different→newest valid.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 16:00:00 +0800
+
 ck-wifikiller (2.5.17-1) unstable; urgency=medium
 
   * Fix hang at "Waiting for target": wait_for_target now polls BSSID,

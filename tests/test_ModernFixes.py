@@ -157,8 +157,13 @@ class TestAttackResultPropagation(unittest.TestCase):
                 patch.object(Configuration, 'use_pmkid_only', False, create=True), \
                 patch.object(Configuration, 'wordlist', 'wordlist.txt', create=True), \
                 patch.object(Configuration, 'cn_optimize', True, create=True), \
+                patch.object(Configuration, 'bg_crack', False, create=True), \
+                patch.object(Configuration, 'wpa_handshake_dir', '/tmp', create=True), \
+                patch('ck_wifikiller.util.capture_select.is_valid_handshake_cap', return_value=True), \
+                patch('ck_wifikiller.util.capture_select.select_handshake_cap', return_value=None), \
                 patch('ck_wifikiller.attack.wpa.os.path.exists', return_value=True), \
                 patch('ck_wifikiller.attack.wpa.Aircrack.crack_handshake', return_value=None), \
+                patch.object(attack, '_crack_handshake', return_value=None), \
                 patch('ck_wifikiller.attack.wpa.CrackResultWPA', FakeResult):
             result = attack.run()
 

@@ -36,38 +36,22 @@ class AttackPMKID(Attack):
         self.pcapng_file = Configuration.temp('pmkid.pcapng')
 
     def get_existing_pmkid_file(self, bssid):
-        """加载 hs/ 下已有 PMKID/22000 哈希。"""
+        """加载 hs/ 下已有有效 PMKID/22000；多份时相同取一、不同取最新。"""
+        from ..util.capture_select import select_pmkid_file, list_pmkid_files
+        from ..util.i18n import t as _t
+
         if not os.path.exists(Configuration.wpa_handshake_dir):
             return None
-
-        bssid = bssid.lower().replace(':', '')
-        # 现代 .hc22000/.22000 + 旧 .16800
-        file_re = re.compile(r'.*pmkid_.*\.(16800|22000|hc22000)$', re.I)
-
-        for filename in os.listdir(Configuration.wpa_handshake_dir):
-            pmkid_filename = os.path.join(Configuration.wpa_handshake_dir, filename)
-            if not os.path.isfile(pmkid_filename):
-                continue
-            if not file_re.match(filename) and not file_re.match(pmkid_filename):
-                continue
-
-            try:
-                with open(pmkid_filename, 'r', encoding='utf-8', errors='replace') as fh:
-                    for pmkid_hash in fh:
-                        pmkid_hash = pmkid_hash.strip()
-                        if not pmkid_hash or pmkid_hash.count('*') < 3:
-                            continue
-                        parts = pmkid_hash.split('*')
-                        # WPA*01*pmkid*macap*...
-                        if parts[0] == 'WPA' and len(parts) >= 4:
-                            existing = parts[3].lower().replace(':', '')
-                        else:
-                            existing = parts[1].lower().replace(':', '')
-                        if existing == bssid:
-                            return pmkid_filename
-            except OSError:
-                continue
-        return None
+        all_files = list_pmkid_files(Configuration.wpa_handshake_dir, bssid)
+        best = select_pmkid_file(Configuration.wpa_handshake_dir, bssid)
+        if best is None:
+            if all_files:
+                Color.pl('{!} {O}%s{W}' % _t('cap.none_valid', len(all_files)))
+            return None
+        if len(all_files) > 1:
+            Color.pl('{+} {D}%s{W}' % _t(
+                'cap.pick', len(all_files), os.path.basename(best)))
+        return best
 
     def run(self):
         from ..util.process import Process
@@ -141,30 +125,80 @@ class AttackPMKID(Attack):
 
         Color.clear_entire_line()
         Color.pattack('PMKID', self.target, 'CAPTURE', '{G}%s{W}' % t('pmkid.ok'))
-        return self.save_pmkid(pmkid_hash)
+        saved = self.save_pmkid(pmkid_hash)
+        if not saved:
+            return None
+        return saved
 
     def crack_pmkid_file(self, pmkid_file):
-        if Hashcat.budget_exhausted():
-            return False
         if Configuration.wordlist is None:
             Color.pl('\n{!} {O}%s{W}' % t('pmkid.no_wordlist'))
-            key = None
-        else:
+            return False
+
+        from ..tools.bg_crack import BgCrack
+        from ..util.capture_select import (
+            select_pmkid_file, is_valid_pmkid_file, read_valid_hc22000_lines,
+        )
+
+        # 同 AP 多哈希：有效优先，不同取最新
+        best = select_pmkid_file(Configuration.wpa_handshake_dir, self.target.bssid)
+        if best:
+            pmkid_file = best
+        if not is_valid_pmkid_file(pmkid_file, want_bssid=self.target.bssid):
+            Color.pl('{!} {R}%s{W}' % t('cap.invalid_no_crack'))
+            return False
+        # 爆破前把文件收成仅含有效行（避免脏文件）
+        lines = read_valid_hc22000_lines(pmkid_file, want_bssid=self.target.bssid)
+        if lines:
+            try:
+                with open(pmkid_file, 'w', encoding='utf-8') as fh:
+                    fh.write('\n'.join(lines) + '\n')
+            except OSError:
+                pass
+
+        # 1) potfile 瞬时
+        key = BgCrack.potfile_check_pmkid(pmkid_file)
+        if key:
+            Color.clear_entire_line()
+            Color.pattack('PMKID', self.target, 'CRACKED',
+                          '{C}%s{W}' % t('wpa.ok', key))
+            self.crack_result = CrackResultPMKID(
+                self.target.bssid, self.target.essid, pmkid_file, key)
+            Color.pl('\n')
+            self.crack_result.dump()
+            return True
+
+        # 2) 默认独立窗口全量字典（捕获已成功，不截断）
+        if BgCrack.enabled():
             Color.clear_entire_line()
             Color.pattack('PMKID', self.target, 'CRACK',
-                          t('wpa.crack', 'hashcat -m 22000') + '\n')
-            key = Hashcat.crack_pmkid(pmkid_file)
+                          t('wpa.crack_bg', os.path.basename(Configuration.wordlist)) + '\n')
+            meta = BgCrack.spawn_pmkid(
+                pmkid_file,
+                essid=self.target.essid,
+                bssid=self.target.bssid,
+            )
+            if meta is not None:
+                # 旁路爆破；主流程可继续其它路径
+                return False
+            # 启动失败回落前台
 
-        # 国内 WiFi 智能优化：字典失败后自动追加国内常用掩码管线（闭环）
+        # 3) 前台（--no-bg-crack 或后台失败；可受预算限制）
+        if Hashcat.budget_exhausted():
+            return False
+        Color.clear_entire_line()
+        Color.pattack('PMKID', self.target, 'CRACK',
+                      t('wpa.crack', 'hashcat -m 22000') + '\n')
+        key = Hashcat.crack_pmkid(pmkid_file)
+
         if key is None and getattr(Configuration, 'cn_optimize', False):
             if not Hashcat.budget_exhausted():
                 key = self._cn_mask_pipeline(pmkid_file)
 
         if key is None:
-            if Configuration.wordlist is not None or getattr(Configuration, 'cn_optimize', False):
-                Color.clear_entire_line()
-                Color.pattack('PMKID', self.target, '{R}CRACK',
-                              '{R}%s{W}\n' % t('pmkid.crack_fail'))
+            Color.clear_entire_line()
+            Color.pattack('PMKID', self.target, '{R}CRACK',
+                          '{R}%s{W}\n' % t('pmkid.crack_fail'))
             return False
 
         Color.clear_entire_line()
@@ -203,17 +237,42 @@ class AttackPMKID(Attack):
         dumptool.interrupt()
 
     def save_pmkid(self, pmkid_hash):
+        from ..util.capture_select import (
+            is_valid_hc22000_line, list_pmkid_files, read_valid_hc22000_lines,
+            line_fingerprint, select_pmkid_file,
+        )
+
         if not os.path.exists(Configuration.wpa_handshake_dir):
             os.makedirs(Configuration.wpa_handshake_dir)
+
+        line = (pmkid_hash or '').strip()
+        if not is_valid_hc22000_line(line, want_bssid=self.target.bssid):
+            Color.pl('{!} {O}%s{W}' % t('cap.invalid_skip_save'))
+            return None
+
+        new_fp = line_fingerprint(line)
+        for path in list_pmkid_files(Configuration.wpa_handshake_dir, self.target.bssid):
+            existing_lines = read_valid_hc22000_lines(path, want_bssid=self.target.bssid)
+            if not existing_lines:
+                continue
+            old_fp = line_fingerprint('\n'.join(sorted(set(existing_lines))))
+            # 单行相同 或 文件仅含同一哈希
+            if new_fp == line_fingerprint(existing_lines[0]) or new_fp == old_fp:
+                if len(existing_lines) == 1 and new_fp == line_fingerprint(existing_lines[0]):
+                    Color.pl('{+} {D}%s{W}' % t('cap.same_reuse', os.path.basename(path)))
+                    return path
 
         essid_safe = re.sub(r'[^a-zA-Z0-9]', '', self.target.essid or 'hidden')
         bssid_safe = self.target.bssid.replace(':', '-')
         date = time.strftime('%Y-%m-%dT%H-%M-%S')
-        # 现代扩展名
         pmkid_file = 'pmkid_%s_%s_%s.hc22000' % (essid_safe, bssid_safe, date)
         pmkid_file = os.path.join(Configuration.wpa_handshake_dir, pmkid_file)
 
         Color.p('\n{+} %s ' % t('pmkid.save', pmkid_file))
         with open(pmkid_file, 'w', encoding='utf-8') as fh:
-            fh.write(pmkid_hash.strip() + '\n')
+            fh.write(line + '\n')
+        Color.pl('')
+        best = select_pmkid_file(Configuration.wpa_handshake_dir, self.target.bssid)
+        if best and os.path.abspath(best) == os.path.abspath(pmkid_file):
+            Color.pl('{+} {D}%s{W}' % t('cap.newest', os.path.basename(best)))
         return pmkid_file
