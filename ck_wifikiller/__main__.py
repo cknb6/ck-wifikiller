@@ -98,9 +98,12 @@ class CKWifiKiller(object):
 
         s = Scanner()
         targets = s.select_targets()
+        if not targets:
+            Color.pl('{!} {O}%s{W}' % t('scan.none_selected'))
+            return
         if self._session:
             self._session.event('targets_selected', {
-                'count': len(targets) if targets else 0,
+                'count': len(targets),
             })
         attacked = AttackAll.attack_multiple(targets)
         Color.pl('{+} %s' % t('attack_done', attacked))

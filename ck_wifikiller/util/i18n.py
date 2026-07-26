@@ -100,13 +100,26 @@ _S: dict[str, tuple[str, str]] = {
     ),
     'scan.decloak': (' + decloak', ' + 去隐藏'),
     'scan.select': (
-        'select target(s) (1-%d, range, or all): ',
-        '选择目标 (1-%d、区间或 all): ',
+        'select targets (1-%d; space/comma e.g. 1 3 5; range 1-3; all): ',
+        '选择目标 (1-%d；空格/逗号如 1 3 5；区间 1-3；all): ',
+    ),
+    'scan.empty_select': (
+        'empty input, try again',
+        '输入为空，请重新选择',
+    ),
+    'scan.invalid_select': (
+        'invalid selection, try again',
+        '选择无效，请重新输入',
     ),
     'scan.none': (
         'no targets found',
         '未发现目标',
     ),
+    'scan.none_selected': (
+        'no targets selected',
+        '未选择目标',
+    ),
+
     'scan.hdr_num': ('NUM', '序号'),
     'scan.hdr_essid': ('ESSID', '名称'),
     'scan.hdr_bssid': ('BSSID', 'BSSID'),
