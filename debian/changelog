@@ -1,3 +1,9 @@
+ck-wifikiller (2.5.9-1) unstable; urgency=medium
+
+  * Fix Python 3 SyntaxWarning on invalid escape sequences in pyrit/tshark regex.
+
+ -- 传康Kk <1837620622@qq.com>  Sun, 26 Jul 2026 18:00:00 +0800
+
 ck-wifikiller (2.5.8-1) unstable; urgency=medium
 
   * Scapy deauth send path aligned with MT7921U auto_attack.py:
