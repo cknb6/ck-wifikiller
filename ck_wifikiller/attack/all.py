@@ -234,7 +234,7 @@ class AttackAll(object):
         设计（v2.5.18）：
         - 在线捕获用满切片
         - 字典全量爆破默认独立窗口（BgCrack），不再靠 path_deadline 截断字典
-        - 握手 deauth 间隔 = clamp(3, 12, slice//4)
+        - 握手: 爆发 deauth×rounds → 静默 listen 秒（默认 4）→ 再爆发
         '''
         seconds = max(1, int(seconds))
         Configuration.path_deadline = path_deadline
@@ -249,8 +249,14 @@ class AttackAll(object):
             Configuration.wps_pixie_timeout = seconds
         elif name == 'handshake':
             Configuration.wpa_attack_timeout = seconds
-            # deauth 间隔必须 < 捕获窗口，切片内至少 1～2 次
-            Configuration.wpa_deauth_timeout = max(3, min(12, max(3, seconds // 4)))
+            # 静默监听：默认 4s；切片短时略缩、长时最多 6s
+            # 保证捕获窗内至少能完成 1～2 个「爆发+静默」周期
+            base_listen = int(getattr(Configuration, 'wpa_deauth_listen', 4) or 4)
+            listen = max(3, min(6, base_listen))
+            if seconds < 20:
+                listen = min(listen, max(3, seconds // 5))
+            Configuration.wpa_deauth_listen = listen
+            Configuration.wpa_deauth_timeout = listen  # 兼容旧字段
         elif name == 'wep':
             Configuration.wep_timeout = seconds
 

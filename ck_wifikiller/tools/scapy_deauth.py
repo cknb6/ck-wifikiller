@@ -183,8 +183,9 @@ class ScapyDeauth(object):
 
         sent = 0
         try:
+            # 爆发阶段：连打 n_rounds 轮（默认 4），中间不停
+            # 静默监听由 AttackWPA 在整次 deauth() 返回后统一 sleep
             for _ in range(n_rounds):
-                # 与参考脚本一致: sendp(burst, iface=..., inter=0.003)
                 sendp(burst, iface=iface, inter=gap, verbose=0)
                 sent += burst_size
         except Exception:

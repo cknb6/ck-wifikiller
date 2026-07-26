@@ -375,10 +375,22 @@ class Arguments(object):
             dest='wpa_deauth_timeout',
             metavar='[seconds]',
             type=int,
-            help=self._verbose('Time to wait between sending Deauths ' +
-                '(default: {G}%d sec{W})' % self.config.wpa_deauth_timeout))
+            help=self._verbose(
+                'Quiet listen seconds after each deauth volley '
+                '(burst x4 then silence; default: {G}%d sec{W})'
+                % getattr(self.config, 'wpa_deauth_listen',
+                          self.config.wpa_deauth_timeout)))
         wpa.add_argument('-wpadt', help=argparse.SUPPRESS, action='store',
                 dest='wpa_deauth_timeout', type=int)
+        wpa.add_argument('--deauth-listen',
+            action='store',
+            dest='wpa_deauth_listen',
+            metavar='[seconds]',
+            type=int,
+            help=self._verbose(
+                'Same as quiet listen after deauth volley '
+                '(default: {G}%d{W})'
+                % getattr(self.config, 'wpa_deauth_listen', 4)))
 
         wpa.add_argument('--wpat',
             action='store',

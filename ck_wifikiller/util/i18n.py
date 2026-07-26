@@ -285,6 +285,18 @@ _S: dict[str, tuple[str, str]] = {
         'listening (clients:%d, deauth:%s, timeout:%s)',
         '监听中 (客户:%d, 断连:%s, 超时:%s)',
     ),
+    'wpa.deauth_burst': (
+        'volley #%d: deauth x%d (clients:%d)',
+        '第%d轮爆发: deauth×%d (客户:%d)',
+    ),
+    'wpa.deauth_listen': (
+        'quiet listen %.0fs (clients:%d, left:%s) — no deauth',
+        '静默监听 %.0fs (客户:%d, 剩余:%s) — 不踢站',
+    ),
+    'wpa.deauth_to': (
+        'deauth %s',
+        '踢站 %s',
+    ),
     'wpa.wait_target': (
         'waiting for target...',
         '等待目标出现...',

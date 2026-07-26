@@ -1,3 +1,10 @@
+ck-wifikiller (2.5.19-1) unstable; urgency=medium
+
+  * Handshake deauth cycle: burst x4 then quiet listen 4s (auto_attack style).
+  * No deauth during listen window so EAPOL can complete; max 3 STA + broadcast.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 18:00:00 +0800
+
 ck-wifikiller (2.5.18-1) unstable; urgency=medium
 
   * Path mins: PMKID ≥60s, others ≥45s (target budget default 210s).
