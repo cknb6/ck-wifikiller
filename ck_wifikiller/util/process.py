@@ -72,7 +72,8 @@ class Process(object):
         stdout = (p.stdout() or '').strip()
         return stdout != ''
 
-    def __init__(self, command, devnull=False, stdout=PIPE, stderr=PIPE, cwd=None, bufsize=0, stdin=PIPE):
+    def __init__(self, command, devnull=False, stdout=PIPE, stderr=PIPE, cwd=None,
+                 bufsize=0, stdin=PIPE, start_new_session=False):
         if isinstance(command, str):
             command = shlex.split(command)
         if not command:
@@ -93,7 +94,17 @@ class Process(object):
             serr = stderr
 
         self.start_time = time.time()
-        self.pid = Popen(command, stdout=sout, stderr=serr, stdin=stdin, cwd=cwd, bufsize=bufsize)
+        # start_new_session：子进程独立进程组，终端 Ctrl+C 只打断 Python，
+        # 避免 airodump 先被 SIGINT 干掉导致扫描循环异常退出、需按两次。
+        self.pid = Popen(
+            command,
+            stdout=sout,
+            stderr=serr,
+            stdin=stdin,
+            cwd=cwd,
+            bufsize=bufsize,
+            start_new_session=start_new_session,
+        )
 
     def __del__(self):
         try:

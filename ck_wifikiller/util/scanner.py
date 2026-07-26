@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""扫描 AP 并选择目标。
+
+表格刷新采用 wifite 经典「光标上移就地覆盖」：
+  始终只有一张表 + 底部一行状态，每秒原地刷新。
+关键修正:
+  1) 上移行数 = header+sep+N 目标 + 状态行 = N+3（从状态行回到表头需 N+2）
+  2) 上移必须用 Color.p，禁止 Color.pl（pl 会多换一行导致错位）
+  3) 行数变少或装不下时才 clear
+  4) Ctrl+C：可中断短 sleep；airodump 独立进程组，SIGINT 只打断 Python
+"""
+
+from __future__ import annotations
+
+import re
+from time import sleep, time
 
 from ..util.color import Color
 from ..tools.airodump import Airodump
@@ -7,87 +22,74 @@ from ..util.input import raw_input, xrange
 from ..model.target import Target, WPSState
 from ..config import Configuration
 
-from time import sleep, time
 
 class Scanner(object):
     ''' Scans wifi networks & provides menu for selecting targets '''
 
-    # Console code for moving up one line
-    UP_CHAR = '\x1B[1F'
+    # 光标上移一行（CSI A）；wifite 用 \x1B[1F，两者在常见终端等价
+    UP_CHAR = '\033[A'
 
     def __init__(self):
-        '''
-        Scans for targets via Airodump.
-        Loops until scan is interrupted via user or config.
-        Note: Sets this object's `targets` attrbute (list[Target]) upon interruption.
-        '''
         self.previous_target_count = 0
-        self._status_line_printed = False
+        self._printed_rows = 0  # 上一帧表格占用行数（含 header/sep/targets，不含 status）
+        self._has_status = False
         self.targets = []
-        self.target = None # Target specified by user (based on ESSID/BSSID)
-
+        self.target = None
+        self.err_msg = None
         max_scan_time = Configuration.scan_time
 
-        self.err_msg = None
-
-        # Loads airodump with interface/channel/etc from Configuration
         try:
             with Airodump() as airodump:
-                # Loop until interrupted (Ctrl+C)
                 scan_start_time = time()
 
                 while True:
                     if airodump.pid.poll() is not None:
-                        return  # Airodump process died
+                        # 子进程异常退出：尽量保留已扫到的目标
+                        if not self.targets:
+                            self.err_msg = Color.s(
+                                '{!} {O}airodump-ng exited unexpectedly{W}')
+                        break
 
                     self.targets = airodump.get_targets(old_targets=self.targets)
 
                     if self.found_target():
-                        return  # We found the target we want
-
-                    if airodump.pid.poll() is not None:
-                        return  # Airodump process died
+                        return
 
                     for target in self.targets:
                         if target.bssid in airodump.decloaked_bssids:
                             target.decloaked = True
 
                     self.print_targets()
-
-                    target_count = len(self.targets)
-                    client_count = sum(len(t.clients) for t in self.targets)
-
-                    from .i18n import t
-                    decloak = t('scan.decloak') if airodump.decloaking else ''
-                    outline = '\r{+} ' + t(
-                        'scan.progress', decloak, target_count, client_count)
-                    Color.clear_entire_line()
-                    Color.p(outline)
-                    self._status_line_printed = True
+                    self._print_status(airodump)
 
                     if max_scan_time > 0 and time() > scan_start_time + max_scan_time:
-                        return
+                        break
 
-                    sleep(1)
+                    # 可中断 sleep：最多等 0.2s 就能响应 Ctrl+C
+                    self._interruptible_sleep(1.0)
 
         except KeyboardInterrupt:
-            # 扫描中断：整屏清一次，选目标时表干净
+            # 一次 Ctrl+C：结束扫描，进入选目标（不要再 clear 整屏叠表）
             Color.pl('')
-            self._status_line_printed = False
-            self.previous_target_count = 0
+            self._has_status = False
+            # 保留 previous 行数，选目标前会 force 干净重画一次
 
+    @staticmethod
+    def _interruptible_sleep(seconds: float) -> None:
+        '''分段 sleep，便于尽快收到 KeyboardInterrupt。'''
+        end = time() + max(0.0, seconds)
+        while True:
+            left = end - time()
+            if left <= 0:
+                return
+            sleep(min(0.2, left))
 
     def found_target(self):
-        '''
-        Detect if we found a target specified by the user (optional).
-        Sets this object's `target` attribute if found.
-        Returns: True if target was specified and found, False otherwise.
-        '''
         bssid = Configuration.target_bssid
         essid = Configuration.target_essid
 
         if bssid is None and essid is None:
-            return False  # No specific target from user.
+            return False
 
         for target in self.targets:
             if Configuration.wps_only and target.wps not in [WPSState.UNLOCKED, WPSState.LOCKED]:
@@ -101,20 +103,18 @@ class Scanner(object):
 
         if self.target:
             Color.pl('\n{+} {C}found target{G} %s {W}({G}%s{W})'
-                % (self.target.bssid, self.target.essid))
+                     % (self.target.bssid, self.target.essid))
             return True
-
         return False
 
+    def _cursor_up(self, n: int) -> None:
+        '''上移 n 行，禁止 pl（否则会多输出换行把布局打乱）。'''
+        if n <= 0:
+            return
+        Color.p(self.UP_CHAR * n)
 
-    def print_targets(self, force_clear=False):
-        '''打印目标列表（1 行一个 AP）。
-
-        刷新策略（相对旧版「光标上移」）:
-          - 不向上移动光标覆盖 splash / 历史输出（会遮挡、错位）
-          - 第二次起用 clear 整屏再画表，表头不重复、不叠在 banner 上
-          - 首次仍画在 splash 下方，保留开场信息
-        '''
+    def print_targets(self, force_full=False):
+        '''打印/刷新目标表。force_full=True 时不依赖上移，直接在当前位置画新表。'''
         if len(self.targets) == 0:
             Color.p('\r')
             return
@@ -122,14 +122,31 @@ class Scanner(object):
         from .i18n import t
         from .term_layout import pad, term_cols
 
-        # 刷新：整屏清空后重画（禁止 UP 上移）
-        if force_clear or (
-                self.previous_target_count > 0 and Configuration.verbose <= 1):
-            from ..util.process import Process
-            Process.call('clear')
-            self._status_line_printed = False
+        n = len(self.targets)
+        # 表格本体行数：header + sep + n 行目标
+        table_rows = 2 + n
+        term_h = Scanner.get_terminal_height()
 
-        self.previous_target_count = len(self.targets)
+        if not force_full and self._printed_rows > 0 and Configuration.verbose <= 1:
+            # 从「状态行」回到表头：状态 1 行 + 上一帧 table_rows
+            # 光标当前在状态行末尾（无换行）
+            lines_up = self._printed_rows + (1 if self._has_status else 0)
+            # 目标变少或终端装不下 → clear 后整表重画
+            if (self.previous_target_count > n
+                    or term_h < table_rows + 3
+                    or lines_up >= term_h):
+                from ..util.process import Process
+                Process.call(['clear'])
+                self._printed_rows = 0
+                self._has_status = False
+            else:
+                self._cursor_up(lines_up)
+                # 从光标清到屏底，去掉残留
+                Color.p('\033[J')
+                self._has_status = False
+
+        self.previous_target_count = n
+        self._printed_rows = table_rows
 
         cols = term_cols()
         fixed = 4 + 2 + 3 + 2 + 4 + 2 + 5 + 2 + 4 + 2 + 4 + 2
@@ -137,6 +154,8 @@ class Scanner(object):
             fixed += 17 + 2
         essid_width = max(12, min(36, cols - fixed - 2))
 
+        # 表头
+        Color.clear_entire_line()
         Color.p('{W}{D}')
         header = '%s  %s' % (
             pad(t('scan.hdr_num'), 4, align='right'),
@@ -152,6 +171,8 @@ class Scanner(object):
             pad(t('scan.hdr_cli'), 4, align='right'),
         )
         Color.pl(header)
+
+        Color.clear_entire_line()
         sep = '%s  %s' % (pad('---', 4), '-' * essid_width)
         if Configuration.show_bssids:
             sep += '  %s' % ('-' * 17)
@@ -160,13 +181,26 @@ class Scanner(object):
         Color.pl(sep)
 
         for idx, target in enumerate(self.targets, start=1):
+            Color.clear_entire_line()
             Color.p('{G}%s{W}  ' % pad(str(idx), 4, align='right'))
             Color.pl(target.to_str(Configuration.show_bssids, essid_width=essid_width))
+
+    def _print_status(self, airodump) -> None:
+        from .i18n import t
+        decloak = t('scan.decloak') if airodump.decloaking else ''
+        outline = '{+} ' + t(
+            'scan.progress',
+            decloak,
+            len(self.targets),
+            sum(len(t.clients) for t in self.targets),
+        )
+        Color.clear_entire_line()
+        Color.p(outline)
+        self._has_status = True
 
     @staticmethod
     def get_terminal_height():
         import shutil
-        # shutil.get_terminal_size 在非 tty 下回退默认值，避免 stty size 崩溃
         return shutil.get_terminal_size().lines
 
     @staticmethod
@@ -175,36 +209,30 @@ class Scanner(object):
         return shutil.get_terminal_size().columns
 
     def select_targets(self):
-        '''
-        Returns list(target)
-        Either a specific target if user specified -bssid or --essid.
-        Otherwise, prompts user to select targets and returns the selection.
-        '''
-
         if self.target:
-            # When user specifies a specific target
             return [self.target]
 
         if len(self.targets) == 0:
             if self.err_msg is not None:
                 Color.pl(self.err_msg)
+            raise Exception(
+                'No targets found.'
+                ' You may need to wait longer,'
+                ' or you may have issues with your wifi card')
 
-            # TODO Print a more-helpful reason for failure.
-            # 1. Link to wireless drivers wiki,
-            # 2. How to check if your device supporst monitor mode,
-            # 3. Provide airodump-ng command being executed.
-            raise Exception('No targets found.'
-                + ' You may need to wait longer,'
-                + ' or you may have issues with your wifi card')
-
-        # 闭环：pillage (-p) / --auto 扫完即打全部，不交互选目标
         if Configuration.scan_time > 0 or getattr(Configuration, 'auto_attack', False):
             return self.targets
 
-        # 选目标：整屏重画一次干净表（不叠扫描残留）
-        self._status_line_printed = False
-        self.previous_target_count = 0
-        self.print_targets(force_clear=True)
+        # 选目标：换行后就地画一张干净表（不再 clear 整屏，避免闪屏）
+        if self._has_status:
+            Color.pl('')  # 结束状态行
+            self._has_status = False
+        # 从上移覆盖扫描表位置重画
+        if self._printed_rows > 0 and Configuration.verbose <= 1:
+            self._cursor_up(self._printed_rows)
+            Color.p('\033[J')
+            self._printed_rows = 0
+        self.print_targets(force_full=True)
 
         if self.err_msg is not None:
             Color.pl(self.err_msg)
@@ -213,7 +241,6 @@ class Scanner(object):
         return self._prompt_target_choice(t)
 
     def _prompt_target_choice(self, t):
-        '''解析选择：支持 1 3 5 / 1,3,5 / 1-3 / all；空输入重试。'''
         while True:
             input_str = '{+} ' + t('scan.select', len(self.targets))
             try:
@@ -233,15 +260,12 @@ class Scanner(object):
             return chosen
 
     def _parse_target_selection(self, raw: str):
-        '''支持空格/逗号混用：1 3 5  或  1,3,5  或  1-3,5 all'''
         text = raw.strip()
         if not text:
             return []
         if text.lower() == 'all':
             return list(self.targets)
 
-        # 逗号与空白都当分隔
-        import re
         tokens = [tok for tok in re.split(r'[\s,]+', text) if tok]
         chosen = []
         seen = set()
@@ -274,7 +298,6 @@ class Scanner(object):
 
 
 if __name__ == '__main__':
-    # 'Test' script will display targets and selects the appropriate one
     Configuration.initialize()
     try:
         s = Scanner()
@@ -285,4 +308,3 @@ if __name__ == '__main__':
     for t in targets:
         Color.pl('    {W}Selected: %s' % t)
     Configuration.exit_gracefully(0)
-

@@ -83,8 +83,8 @@ class Airodump(Dependency):
         if self.ivs_only: command.extend(['--output-format', 'ivs,csv'])
         else:             command.extend(['--output-format', 'pcap,csv'])
 
-        # Start the process
-        self.pid = Process(command, devnull=True)
+        # 独立进程组：Ctrl+C 只发给 Python，由 Scanner 捕获后干净停扫
+        self.pid = Process(command, devnull=True, start_new_session=True)
         return self
 
 

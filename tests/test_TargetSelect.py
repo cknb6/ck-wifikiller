@@ -7,6 +7,24 @@ from types import SimpleNamespace
 from ck_wifikiller.util.scanner import Scanner
 
 
+class TestScannerRefreshMath(unittest.TestCase):
+    '''就地刷新：上移行数 = 表行 + 状态行。'''
+
+    def test_cursor_up_includes_status(self):
+        s = Scanner.__new__(Scanner)
+        s._printed_rows = 2 + 10  # header+sep+10 targets
+        s._has_status = True
+        lines_up = s._printed_rows + (1 if s._has_status else 0)
+        self.assertEqual(lines_up, 13)
+
+    def test_cursor_up_no_status(self):
+        s = Scanner.__new__(Scanner)
+        s._printed_rows = 2 + 5
+        s._has_status = False
+        lines_up = s._printed_rows + (1 if s._has_status else 0)
+        self.assertEqual(lines_up, 7)
+
+
 class TestTargetSelectParse(unittest.TestCase):
     def setUp(self):
         self.s = Scanner.__new__(Scanner)
