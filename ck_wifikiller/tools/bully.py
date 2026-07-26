@@ -66,13 +66,21 @@ class Bully(Attack, Dependency):
 
 
     def run(self):
+        limit = Configuration.wps_pixie_timeout
+        if not self.pixie_dust:
+            limit = getattr(Configuration, 'wps_pin_timeout', limit)
+
         with Airodump(channel=self.target.channel,
                       target_bssid=self.target.bssid,
                       skip_wps=True,
                       output_file_prefix='wps_pin') as airodump:
-            # Wait for target
-            self.pattack('Waiting for target to appear...')
-            self.target = self.wait_for_target(airodump)
+            def _on_wait(remaining):
+                self.pattack('Waiting for target... {O}%.0fs{W}' % remaining)
+
+            self.pattack('Waiting for target...')
+            remain_budget = max(2, int(limit - self.running_time()))
+            self.target = self.wait_for_target(
+                airodump, timeout=remain_budget, on_wait=_on_wait)
 
             # Start bully
             self.bully_proc = Process(self.cmd,
@@ -81,9 +89,9 @@ class Bully(Attack, Dependency):
                 cwd=Configuration.temp())
 
             # Start bully status thread
-            t = Thread(target=self.parse_line_thread)
-            t.daemon = True
-            t.start()
+            dump_thread = Thread(target=self.parse_line_thread)
+            dump_thread.daemon = True
+            dump_thread.start()
 
             try:
                 self._run(airodump)
@@ -98,22 +106,24 @@ class Bully(Attack, Dependency):
             self.pattack('{R}Failed{W}', newline=True)
 
     def _run(self, airodump):
+        limit = Configuration.wps_pixie_timeout
+        if not self.pixie_dust:
+            limit = getattr(Configuration, 'wps_pin_timeout', limit)
+
         while self.bully_proc.poll() is None:
-            try:
-                self.target = self.wait_for_target(airodump)
-            except Exception as e:
-                self.pattack('{R}Failed: {O}%s{W}' % e, newline=True)
-                Color.pexception(e)
+            if self.running_time() > limit:
+                self.pattack('{R}Failed: {O}Timeout after %d seconds{W}' % limit,
+                             newline=True)
                 self.stop()
                 break
+
+            # 刷新：短超时，不因 CSV 抖动卡死
+            self.target = self.wait_for_target(airodump, refresh=True)
 
             # Update status
             self.pattack(self.get_status())
 
             # 墙钟超时：Pixie 与 PIN 均受限（调度器按切片注入）
-            limit = Configuration.wps_pixie_timeout
-            if not self.pixie_dust:
-                limit = getattr(Configuration, 'wps_pin_timeout', limit)
             if self.running_time() > limit:
                 self.pattack('{R}Failed: {O}Timeout after %d seconds{W}' % limit,
                              newline=True)

@@ -158,7 +158,14 @@ class AttackWPA(Attack):
 
             Color.clear_entire_line()
             Color.pattack('WPA', self.target, 'Handshake', t('wpa.wait_target'))
-            airodump_target = self.wait_for_target(airodump)
+            def _on_wait(remaining):
+                Color.pattack(
+                    'WPA', self.target, 'Handshake',
+                    '%s {O}%.0fs{W}' % (t('wpa.wait_target'), remaining))
+            airodump_target = self.wait_for_target(
+                airodump,
+                timeout=max(2, int(Configuration.wpa_attack_timeout)),
+                on_wait=_on_wait)
 
             self.clients = []
 
@@ -223,7 +230,7 @@ class AttackWPA(Attack):
                 os.remove(temp_file)
 
                 # Look for new clients（过滤广播/组播噪声 MAC）
-                airodump_target = self.wait_for_target(airodump)
+                airodump_target = self.wait_for_target(airodump, refresh=True)
                 for client in airodump_target.clients:
                     sta = (client.station or '').upper()
                     if not AttackWPA._is_usable_client(sta):

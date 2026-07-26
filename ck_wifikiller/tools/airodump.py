@@ -85,6 +85,14 @@ class Airodump(Dependency):
 
         # 独立进程组：Ctrl+C 只发给 Python，由 Scanner 捕获后干净停扫
         self.pid = Process(command, devnull=True, start_new_session=True)
+        # 等 CSV 首写 + 信道锁定；过短则 wait_for_target 空转
+        time.sleep(0.6)
+        # 启动即挂则快速暴露（避免上层干等）
+        if self.pid.poll() is not None:
+            from ..util.color import Color
+            Color.pl('{!} {R}airodump-ng 启动失败 (exit %s){W} — 检查网卡/监听模式，'
+                     '或 {C}--kill{W} 结束 NetworkManager/wpa_supplicant'
+                     % self.pid.poll())
         return self
 
 

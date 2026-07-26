@@ -1,3 +1,12 @@
+ck-wifikiller (2.5.17-1) unstable; urgency=medium
+
+  * Fix hang at "Waiting for target": wait_for_target now polls BSSID,
+    respects path_deadline, short refresh, airodump-dead fail-fast.
+  * WPS reaver/bully/WPA/WEP no longer re-block 60s on CSV jitter.
+  * Countdown status during wait; airodump start settle + exit detect.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 14:00:00 +0800
+
 ck-wifikiller (2.5.16-1) unstable; urgency=medium
 
   * Fix PMKID crash: Thread var shadowed i18n t() → TypeError not callable.

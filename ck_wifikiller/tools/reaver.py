@@ -81,15 +81,23 @@ class Reaver(Attack, Dependency):
 
     def _run(self):
         self.start_time = time.time()
+        limit = Configuration.wps_pixie_timeout
+        if not self.pixie_dust:
+            limit = getattr(Configuration, 'wps_pin_timeout', limit)
 
         with Airodump(channel=self.target.channel,
                       target_bssid=self.target.bssid,
                       skip_wps=True,
                       output_file_prefix='pixie') as airodump:
 
-            # Wait for target
-            self.pattack('Waiting for target to appear...')
-            self.target = self.wait_for_target(airodump)
+            # 等目标：带倒计时，且受 path_deadline / 切片限制（不再干等 60s）
+            def _on_wait(remaining):
+                self.pattack('Waiting for target... {O}%.0fs{W}' % remaining)
+
+            self.pattack('Waiting for target...')
+            remain_budget = max(2, int(limit - self.running_time()))
+            self.target = self.wait_for_target(
+                airodump, timeout=remain_budget, on_wait=_on_wait)
 
             # Start reaver
             self.reaver_proc = Process(self.reaver_cmd,
@@ -100,9 +108,12 @@ class Reaver(Attack, Dependency):
 
             # Loop while reaver is running
             while self.crack_result is None and self.reaver_proc.poll() is None:
+                # 墙钟先判，避免 refresh 再拖时间
+                if self.running_time() > limit:
+                    raise Exception('Timeout after %d seconds' % limit)
 
-                # Refresh target information (power)
-                self.target = self.wait_for_target(airodump)
+                # 刷新信号：短超时，失败保留旧 target
+                self.target = self.wait_for_target(airodump, refresh=True)
 
                 # Update based on reaver output
                 stdout = self.get_output()

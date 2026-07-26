@@ -61,7 +61,7 @@ class AttackWEP(Attack):
 
                     Color.clear_line()
                     Color.p('\r{+} {O}waiting{W} for target to appear...')
-                    airodump_target = self.wait_for_target(airodump)
+                    airodump_target = self.wait_for_target(airodump, timeout=20)
 
                     fakeauth_proc = None
                     if self.fake_auth():
@@ -96,7 +96,7 @@ class AttackWEP(Attack):
                     # Loop until attack completes.
 
                     while True:
-                        airodump_target = self.wait_for_target(airodump)
+                        airodump_target = self.wait_for_target(airodump, refresh=True)
 
                         if client_mac is None and len(airodump_target.clients) > 0:
                             client_mac = airodump_target.clients[0].station
