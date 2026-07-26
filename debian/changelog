@@ -1,3 +1,9 @@
+ck-wifikiller (2.5.12-1) unstable; urgency=medium
+
+  * Scan UI: stop cursor-up overwrite (was covering splash); refresh via clear + redraw.
+
+ -- 传康Kk <1837620622@qq.com>  Sun, 26 Jul 2026 22:00:00 +0800
+
 ck-wifikiller (2.5.11-1) unstable; urgency=medium
 
   * Interface select: auto-use when only one NIC; prompt when multiple.

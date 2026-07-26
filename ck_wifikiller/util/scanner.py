@@ -71,9 +71,10 @@ class Scanner(object):
                     sleep(1)
 
         except KeyboardInterrupt:
-            # 扫描中断：清状态行，保留目标列表供选择
+            # 扫描中断：整屏清一次，选目标时表干净
             Color.pl('')
             self._status_line_printed = False
+            self.previous_target_count = 0
 
 
     def found_target(self):
@@ -106,12 +107,13 @@ class Scanner(object):
         return False
 
 
-    def print_targets(self, include_status_line=True):
-        '''Prints targets selection menu (1 target per row).
+    def print_targets(self, force_clear=False):
+        '''打印目标列表（1 行一个 AP）。
 
-        布局（自顶向下）:
-          header / sep / target×N / [status 同一行无换行]
-        刷新时用「光标上移 + 清到屏底」，避免 NUM 表头重复。
+        刷新策略（相对旧版「光标上移」）:
+          - 不向上移动光标覆盖 splash / 历史输出（会遮挡、错位）
+          - 第二次起用 clear 整屏再画表，表头不重复、不叠在 banner 上
+          - 首次仍画在 splash 下方，保留开场信息
         '''
         if len(self.targets) == 0:
             Color.p('\r')
@@ -120,23 +122,14 @@ class Scanner(object):
         from .i18n import t
         from .term_layout import pad, term_cols
 
-        if self.previous_target_count > 0 and Configuration.verbose <= 1:
-            # 上一轮: header + sep + N targets (+ status 占一行)
-            prev_n = self.previous_target_count
-            lines_up = 2 + prev_n  # header + sep + targets
-            if getattr(self, '_status_line_printed', False):
-                lines_up += 1
-            term_h = Scanner.get_terminal_height()
-            if prev_n > len(self.targets) or term_h < lines_up + 2:
-                from ..util.process import Process
-                Process.call('clear')
-            else:
-                # 必须用 p 不能 pl：pl 会再换行导致错位、表头重复
-                Color.p(Scanner.UP_CHAR * lines_up)
-                Color.p('\033[J')  # 从光标清到屏底
+        # 刷新：整屏清空后重画（禁止 UP 上移）
+        if force_clear or (
+                self.previous_target_count > 0 and Configuration.verbose <= 1):
+            from ..util.process import Process
+            Process.call('clear')
+            self._status_line_printed = False
 
         self.previous_target_count = len(self.targets)
-        self._status_line_printed = False
 
         cols = term_cols()
         fixed = 4 + 2 + 3 + 2 + 4 + 2 + 5 + 2 + 4 + 2 + 4 + 2
@@ -144,7 +137,6 @@ class Scanner(object):
             fixed += 17 + 2
         essid_width = max(12, min(36, cols - fixed - 2))
 
-        Color.clear_entire_line()
         Color.p('{W}{D}')
         header = '%s  %s' % (
             pad(t('scan.hdr_num'), 4, align='right'),
@@ -168,7 +160,6 @@ class Scanner(object):
         Color.pl(sep)
 
         for idx, target in enumerate(self.targets, start=1):
-            Color.clear_entire_line()
             Color.p('{G}%s{W}  ' % pad(str(idx), 4, align='right'))
             Color.pl(target.to_str(Configuration.show_bssids, essid_width=essid_width))
 
@@ -210,12 +201,10 @@ class Scanner(object):
         if Configuration.scan_time > 0 or getattr(Configuration, 'auto_attack', False):
             return self.targets
 
-        # Ask user for targets（只打印一次表，避免与扫描刷新叠表头）
+        # 选目标：整屏重画一次干净表（不叠扫描残留）
         self._status_line_printed = False
-        self.previous_target_count = 0  # 强制整表重画，不依赖上移
-        Color.pl('')
-        self.print_targets()
-        Color.clear_entire_line()
+        self.previous_target_count = 0
+        self.print_targets(force_clear=True)
 
         if self.err_msg is not None:
             Color.pl(self.err_msg)

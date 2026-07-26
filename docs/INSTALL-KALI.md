@@ -48,7 +48,7 @@ ls /etc/apt/sources.list.d/
 ## 方式 B：GitHub Release `.deb`（不配源）
 
 ```bash
-curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.11/ck-wifikiller_2.5.11_all.deb
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.12/ck-wifikiller_2.5.11_all.deb
 sudo apt install -y ./ck-wifikiller_2.5.11_all.deb
 ```
 
@@ -93,8 +93,8 @@ sudo ck-wifikiller --no-update
 Tag 触发 GitHub Actions：构建 `.deb` → 更新 `gh-pages` apt 仓库 → 创建 Release。
 
 ```bash
-git tag v2.5.11
-git push origin v2.5.11
+git tag v2.5.12
+git push origin v2.5.12
 ```
 
 本地构建（可选）：
