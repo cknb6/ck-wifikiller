@@ -120,6 +120,7 @@ _S: dict[str, tuple[str, str]] = {
         '未选择目标',
     ),
 
+    # 表头：中文须与列宽匹配（全角占 2 列）；过长会在 pad 时被截成「…」
     'scan.hdr_num': ('NUM', '序号'),
     'scan.hdr_essid': ('ESSID', '名称'),
     'scan.hdr_bssid': ('BSSID', 'BSSID'),
@@ -127,7 +128,7 @@ _S: dict[str, tuple[str, str]] = {
     'scan.hdr_encr': ('ENCR', '加密'),
     'scan.hdr_power': ('PWR', '信号'),
     'scan.hdr_wps': ('WPS', 'WPS'),
-    'scan.hdr_cli': ('CLI', '客户端'),
+    'scan.hdr_cli': ('CLI', '客户'),  # 2 字=4 列，避免「客户端」被截成 ...
 
     # attack
     'atk.none': (

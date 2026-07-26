@@ -118,14 +118,30 @@ class Target(object):
         raw = (self.auth_raw + ' ' + self.privacy_raw).upper()
         return 'SAE' in raw and 'PSK' in raw
 
-    def to_str(self, show_bssid=False, essid_width=24):
+    def to_str(self, show_bssid=False, essid_width=24, col=None):
         '''
-            扫描表一行。ESSID 等列按终端显示宽度对齐（中文占 2 列）。
+            扫描表一行。列宽与表头一致（col 来自 term_layout.scan_col_widths）。
         '''
         from ..util.term_layout import pad
 
+        ch_w = 4
+        enc_w = 4
+        pwr_w = 5
+        wps_w = 4
+        cli_w = 4
+        bssid_w = 17
+        if col:
+            essid_width = col.get('essid', essid_width)
+            ch_w = col.get('ch', ch_w)
+            enc_w = col.get('encr', enc_w)
+            pwr_w = col.get('pwr', pwr_w)
+            wps_w = col.get('wps', wps_w)
+            cli_w = col.get('cli', cli_w)
+            bssid_w = col.get('bssid', bssid_w) or 17
+
         raw = self.essid if self.essid_known else '(%s)' % self.bssid
-        essid_plain = pad(raw, essid_width)
+        # decloak 星号占 1 列，ESSID 本体少 1
+        essid_plain = pad(raw, max(1, essid_width - 1))
         if self.essid_known:
             essid = Color.s('{C}%s' % essid_plain)
         else:
@@ -135,16 +151,20 @@ class Target(object):
         else:
             essid += ' '
 
-        bssid = Color.s('{O}%s{W}  ' % self.bssid) if show_bssid else ''
+        if show_bssid:
+            bssid = Color.s('{O}%s{W}' % pad(self.bssid, bssid_w)) + '  '
+        else:
+            bssid = ''
 
         try:
             ch_num = int(str(self.channel).strip() or '0')
         except ValueError:
             ch_num = 0
         channel_color = '{C}' if ch_num > 14 else '{G}'
-        channel = Color.s('%s%s{W}' % (channel_color, pad(str(self.channel), 3, align='right')))
+        channel = Color.s('%s%s{W}' % (
+            channel_color, pad(str(self.channel), ch_w, align='right')))
 
-        enc_plain = pad(self.encryption[:4], 4)
+        enc_plain = pad((self.encryption or '')[:max(4, enc_w)], enc_w)
         if 'WEP' in self.encryption:
             encryption = Color.s('{G}%s{W}' % enc_plain)
         elif 'WPA' in self.encryption:
@@ -152,7 +172,7 @@ class Target(object):
         else:
             encryption = Color.s('{W}%s{W}' % enc_plain)
 
-        power_plain = pad('%sdb' % self.power, 5, align='right')
+        power_plain = pad('%sdb' % self.power, pwr_w, align='right')
         if self.power > 50:
             pcolor = 'G'
         elif self.power > 35:
@@ -162,21 +182,21 @@ class Target(object):
         power = Color.s('{%s}%s{W}' % (pcolor, power_plain))
 
         if self.wps == WPSState.UNLOCKED:
-            wps = Color.s('{G}%s{W}' % pad('yes', 4))
+            wps = Color.s('{G}%s{W}' % pad('yes', wps_w))
         elif self.wps == WPSState.NONE:
-            wps = Color.s('{O}%s{W}' % pad('no', 4))
+            wps = Color.s('{O}%s{W}' % pad('no', wps_w))
         elif self.wps == WPSState.LOCKED:
-            wps = Color.s('{R}%s{W}' % pad('lock', 4))
+            wps = Color.s('{R}%s{W}' % pad('lock', wps_w))
         else:
-            wps = Color.s('{O}%s{W}' % pad('n/a', 4))
+            wps = Color.s('{O}%s{W}' % pad('n/a', wps_w))
 
         n_clients = len(self.clients)
         if n_clients > 0:
-            clients = Color.s('{G}%s{W}' % pad(str(n_clients), 4, align='right'))
+            clients = Color.s('{G}%s{W}' % pad(str(n_clients), cli_w, align='right'))
         else:
-            clients = pad('', 4)
+            clients = pad('', cli_w)
 
-        return '%s %s%s  %s  %s  %s  %s%s' % (
+        return '%s  %s%s  %s  %s  %s  %s%s' % (
             essid, bssid, channel, encryption, power, wps, clients, Color.s('{W}'))
 
 

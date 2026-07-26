@@ -75,3 +75,45 @@ def pad(text: str, width: int, align: str = 'left') -> str:
         right = pad_n - left
         return (' ' * left) + text + (' ' * right)
     return text + (' ' * pad_n)
+
+
+def scan_col_widths(show_bssid: bool = False) -> dict:
+    """扫描表列宽：列宽 >= 表头显示宽度，避免中文被截成「信」「…」。
+
+    返回 keys: num, essid, bssid, ch, encr, pwr, wps, cli, gap
+    """
+    # 延迟导入，避免 i18n ↔ term_layout 环依赖
+    from .i18n import t
+
+    gap = 2
+    num = max(4, display_width(t('scan.hdr_num')))
+    ch = max(4, display_width(t('scan.hdr_ch')))      # 信道=4
+    encr = max(4, display_width(t('scan.hdr_encr')))  # 加密=4
+    pwr = max(5, display_width(t('scan.hdr_power')))  # 信号=4, 数据如 39db=4
+    wps = max(4, display_width(t('scan.hdr_wps')))
+    cli = max(4, display_width(t('scan.hdr_cli')))    # 客户=4
+
+    fixed = num + gap + ch + gap + encr + gap + pwr + gap + wps + gap + cli
+    bssid_w = 0
+    if show_bssid:
+        bssid_w = max(17, display_width(t('scan.hdr_bssid')))
+        fixed += gap + bssid_w
+
+    cols = term_cols()
+    # ESSID 吃剩余宽度，限制在 12–36
+    essid = max(12, min(36, cols - fixed - gap - 2))
+    # 极窄终端：压缩 ESSID，保证右侧列完整显示
+    if essid < 12:
+        essid = max(8, cols - fixed - gap - 2)
+
+    return {
+        'num': num,
+        'essid': essid,
+        'bssid': bssid_w,
+        'ch': ch,
+        'encr': encr,
+        'pwr': pwr,
+        'wps': wps,
+        'cli': cli,
+        'gap': gap,
+    }

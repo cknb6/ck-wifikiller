@@ -1,3 +1,10 @@
+ck-wifikiller (2.5.15-1) unstable; urgency=medium
+
+  * Fix scan headers: CJK column widths (信道/客户 not truncated to 信/...).
+  * Unified header/data column layout via scan_col_widths().
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 01:00:00 +0800
+
 ck-wifikiller (2.5.14-1) unstable; urgency=medium
 
   * Scan: keep splash fixed; only refresh table region (UP to header + erase down).

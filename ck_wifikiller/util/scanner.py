@@ -146,7 +146,7 @@ class Scanner(object):
             return
 
         from .i18n import t
-        from .term_layout import pad, term_cols
+        from .term_layout import pad
 
         n = len(self.targets)
         table_rows = 2 + n  # header + sep + targets
@@ -170,41 +170,51 @@ class Scanner(object):
         self.previous_target_count = n
         self._table_rows = table_rows
 
-        cols = term_cols()
-        fixed = 4 + 2 + 3 + 2 + 4 + 2 + 5 + 2 + 4 + 2 + 4 + 2
-        if Configuration.show_bssids:
-            fixed += 17 + 2
-        essid_width = max(12, min(36, cols - fixed - 2))
+        from .term_layout import scan_col_widths
+        col = scan_col_widths(Configuration.show_bssids)
+        g = '  '  # gap 2 spaces，与 scan_col_widths 一致
 
         Color.clear_entire_line()
         Color.p('{W}{D}')
-        header = '%s  %s' % (
-            pad(t('scan.hdr_num'), 4, align='right'),
-            pad(t('scan.hdr_essid'), essid_width),
-        )
+        parts = [
+            pad(t('scan.hdr_num'), col['num'], align='right'),
+            pad(t('scan.hdr_essid'), col['essid']),
+        ]
         if Configuration.show_bssids:
-            header += '  %s' % pad(t('scan.hdr_bssid'), 17)
-        header += '  %s  %s  %s  %s  %s' % (
-            pad(t('scan.hdr_ch'), 3, align='right'),
-            pad(t('scan.hdr_encr'), 4),
-            pad(t('scan.hdr_power'), 5, align='right'),
-            pad(t('scan.hdr_wps'), 4),
-            pad(t('scan.hdr_cli'), 4, align='right'),
-        )
-        Color.pl(header)
+            parts.append(pad(t('scan.hdr_bssid'), col['bssid']))
+        parts.extend([
+            pad(t('scan.hdr_ch'), col['ch'], align='right'),
+            pad(t('scan.hdr_encr'), col['encr']),
+            pad(t('scan.hdr_power'), col['pwr'], align='right'),
+            pad(t('scan.hdr_wps'), col['wps']),
+            pad(t('scan.hdr_cli'), col['cli'], align='right'),
+        ])
+        Color.pl(g.join(parts))
 
         Color.clear_entire_line()
-        sep = '%s  %s' % (pad('---', 4), '-' * essid_width)
+        seps = [
+            pad('-' * min(3, col['num']), col['num']),
+            '-' * col['essid'],
+        ]
         if Configuration.show_bssids:
-            sep += '  %s' % ('-' * 17)
-        sep += '  %s  %s  %s  %s  %s{W}' % (
-            '-' * 3, '-' * 4, '-' * 5, '-' * 4, '-' * 4)
-        Color.pl(sep)
+            seps.append('-' * col['bssid'])
+        seps.extend([
+            '-' * col['ch'],
+            '-' * col['encr'],
+            '-' * col['pwr'],
+            '-' * col['wps'],
+            '-' * col['cli'] + '{W}',
+        ])
+        Color.pl(g.join(seps))
 
         for idx, target in enumerate(self.targets, start=1):
             Color.clear_entire_line()
-            Color.p('{G}%s{W}  ' % pad(str(idx), 4, align='right'))
-            Color.pl(target.to_str(Configuration.show_bssids, essid_width=essid_width))
+            Color.p('{G}%s{W}%s' % (pad(str(idx), col['num'], align='right'), g))
+            Color.pl(target.to_str(
+                Configuration.show_bssids,
+                essid_width=col['essid'],
+                col=col,
+            ))
 
     def _print_status(self, airodump) -> None:
         from .i18n import t
