@@ -75,20 +75,21 @@ class Configuration(object):
 
         # WPA variables
         cls.wpa_filter = False # Only attack WPA networks
-        cls.wpa_deauth_timeout = 15 # Wait time between deauths
+        cls.wpa_deauth_timeout = 5  # 默认 5s；调度器按切片联动覆盖（须 < 捕获窗口）
         cls.wpa_attack_timeout = 60 # 单路径握手捕获上限（调度器会按切片覆盖）
         cls.wpa_handshake_dir = 'hs' # Dir to store handshakes
         cls.wpa_strip_handshake = False # Strip non-handshake packets
         cls.ignore_old_handshakes = False # Always fetch a new handshake
 
         # 单目标总预算 / 每条攻击路径最短时长（秒）
-        # 4 条路径 × 15s = 60s；不够 min 时自动抬高总预算
-        cls.target_timeout = 60
+        # 默认 90s：4 路径加权后约 20–30s/路，捕获能跑满切片
+        # 不够 min 时自动抬高总预算（n × attack_min_slice）
+        cls.target_timeout = 90
         cls.attack_min_slice = 15
-        # 闭环：--auto 扫完即打全部；path_deadline 给 hashcat --runtime
+        # 闭环：--auto 扫完即打全部；path_deadline 给爆破墙钟
         cls.auto_attack = False
         cls.path_deadline = None  # float unix ts，当前路径墙钟截止
-        cls.hashcat_runtime = 0   # 0=不限；>0 传给 hashcat --runtime
+        cls.hashcat_runtime = 0   # 0=跟 path_deadline；>0 显式秒数
 
         # PMKID variables
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack

@@ -68,21 +68,25 @@ class Hashcat(Dependency):
     def _runtime_seconds() -> int:
         """根据路径墙钟截止 / 显式 hashcat_runtime 计算 --runtime 秒数。
 
-        最佳实践 (hashcat docs): --runtime=N 在 N 秒后中止会话，
-        保证时间切片调度不会被字典/掩码拖垮。
+        最佳实践 (hashcat docs): --runtime=N 在 N 秒后中止会话。
+        预算已尽返回 0（调用方应跳过爆破，勿再强行跑 1s）。
         """
         import time as _time
         deadline = getattr(Configuration, 'path_deadline', None)
         if deadline is not None:
-            remain = int(deadline - _time.time())
-            if remain < 1:
-                return 1
-            return remain
+            return max(0, int(deadline - _time.time()))
         try:
             rt = int(getattr(Configuration, 'hashcat_runtime', 0) or 0)
         except (TypeError, ValueError):
             rt = 0
         return max(0, rt)
+
+    @staticmethod
+    def budget_exhausted() -> bool:
+        """路径预算是否已尽（有 deadline 且剩余 < 1s）。"""
+        if getattr(Configuration, 'path_deadline', None) is None:
+            return False
+        return Hashcat._runtime_seconds() < 1
 
     @staticmethod
     def _extra_attack_args(is_mask: bool = False) -> list[str]:
@@ -103,7 +107,7 @@ class Hashcat(Dependency):
             extra.extend(['--increment-min', '8'])
             extra.extend(['--increment-max', str(increment_max)])
 
-        # 时间预算：官方 --runtime 将爆破纳入路径切片
+        # 时间预算：官方 --runtime 将爆破纳入路径剩余墙钟
         rt = Hashcat._runtime_seconds()
         if rt > 0:
             extra.extend(['--runtime', str(rt)])
@@ -125,6 +129,9 @@ class Hashcat(Dependency):
         if Configuration.wordlist is None and Configuration.hashcat_mask is None:
             return None
         if not os.path.isfile(hash_file):
+            return None
+        # 路径预算已尽：不再开字典
+        if Hashcat.budget_exhausted():
             return None
 
         mask = getattr(Configuration, 'hashcat_mask', None)
@@ -165,6 +172,8 @@ class Hashcat(Dependency):
     def crack_hc22000_mask(hash_file: str, mask: str, verbose: bool = False) -> str | None:
         """对 hc22000 文件跑单个掩码爆破（-a 3），供国内优化管线复用。"""
         if not mask or not os.path.isfile(hash_file):
+            return None
+        if Hashcat.budget_exhausted():
             return None
         for additional_arg in ([], ['--show']):
             command = [

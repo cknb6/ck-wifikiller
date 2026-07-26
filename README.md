@@ -10,11 +10,11 @@ Authorized security testing only. 仅限授权安全测试。
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![hashcat](https://img.shields.io/badge/hashcat-m%2022000-49A942)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.5-success)](https://github.com/cknb6/ck-wifikiller/releases)
+[![Release](https://img.shields.io/badge/Release-v2.5.6-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 ```
 GitHub:  https://github.com/cknb6/ck-wifikiller
-Version: CK_WIFI_VERSION env > git describe > 2.5.5-ck
+Version: CK_WIFI_VERSION env > git describe > 2.5.6-ck
 Author:  传康Kk（万能程序员）
 WeChat:  1837620622  (赞助备注「wifi赞助」/ 商务「商务合作」)
 Email:   2040168455@qq.com
@@ -52,7 +52,8 @@ It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestra
 | Hardcoded version | Dynamic version (env / git describe) |
 | No update check | Optional non-blocking GitHub Release check |
 | Interactive-only select | `--auto` / `-p` closed-loop: scan then attack all |
-| Crack overruns path budget | hashcat `--runtime` bound to path wall-clock |
+| Crack overruns path budget | Capture-first full slice; crack uses remaining wall-clock |
+| Equal path slices | Weighted: handshake/PMKID > Pixie > PIN; default 90s/AP |
 
 ---
 
@@ -63,8 +64,10 @@ It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestra
 - PMKID path via `hcxdumptool` → `hcxpcapngtool` → hashcat `-m 22000`
 - BPF filter retains undirected probes (`addr3` target **or** broadcast); `--exitoneapol 7` only with BPF
 - WPA handshake path via airodump/aireplay + aircrack/hashcat/john/cowpatty
-- WPS Pixie-Dust / PIN via reaver (or bully); brand-ordered path slices (min 15s)
-- Offline crack: `--rules`, `--mask`, `--increment`, `--hc-args`; hashcat `--runtime` respects path budget
+- WPS Pixie-Dust / PIN via reaver (or bully); brand-ordered **weighted** path slices (min 15s, default 90s/AP)
+- Capture-first: full slice for capture; early success leaves wall-clock for hashcat/aircrack
+- Handshake deauth interval synced to capture window (deauth at start)
+- Offline crack: `--rules`, `--mask`, `--increment`, `--hc-args`; budget exhausted → skip crack
 - Closed loop: `--auto` (scan 15s then all) or `-p N` pillage
 
 ### CN audit profile (`--cn`)
@@ -131,8 +134,8 @@ Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `
 ### 2) Manual `.deb` from Releases (no apt repo)
 
 ```bash
-curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.5/ck-wifikiller_2.5.5_all.deb
-sudo apt install -y ./ck-wifikiller_2.5.5_all.deb
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.6/ck-wifikiller_2.5.6_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.6_all.deb
 ```
 
 ### 3) From source
@@ -263,7 +266,7 @@ Tag-triggered CI (`.github/workflows/build-deb.yml`):
 3. **publish-release** — GitHub Release with `.deb` and `SHA256SUMS`
 
 ```bash
-git tag v2.5.5 && git push origin v2.5.5
+git tag v2.5.6 && git push origin v2.5.6
 ```
 
 Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is the canonical path.

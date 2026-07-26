@@ -117,6 +117,10 @@ class AttackPMKID(Attack):
         pmkid_hash = None
         pcaptool = HcxPcapTool(self.target)
         while self.timer.remaining() > 0:
+            # 路径总截止：提前结束捕获，把剩余时间留给爆破
+            if getattr(Configuration, 'path_deadline', None) is not None:
+                if time.time() >= Configuration.path_deadline:
+                    break
             pmkid_hash = pcaptool.get_pmkid_hash(self.pcapng_file)
             if pmkid_hash is not None:
                 break
@@ -139,6 +143,8 @@ class AttackPMKID(Attack):
         return self.save_pmkid(pmkid_hash)
 
     def crack_pmkid_file(self, pmkid_file):
+        if Hashcat.budget_exhausted():
+            return False
         if Configuration.wordlist is None:
             Color.pl('\n{!} {O}%s{W}' % t('pmkid.no_wordlist'))
             key = None
@@ -150,7 +156,8 @@ class AttackPMKID(Attack):
 
         # 国内 WiFi 智能优化：字典失败后自动追加国内常用掩码管线（闭环）
         if key is None and getattr(Configuration, 'cn_optimize', False):
-            key = self._cn_mask_pipeline(pmkid_file)
+            if not Hashcat.budget_exhausted():
+                key = self._cn_mask_pipeline(pmkid_file)
 
         if key is None:
             if Configuration.wordlist is not None or getattr(Configuration, 'cn_optimize', False):
@@ -178,7 +185,7 @@ class AttackPMKID(Attack):
         Color.pattack('PMKID', self.target, 'CN-OPT',
                       t('wpa.cn_run', len(masks)) + '\n')
         for idx, mask in enumerate(masks, 1):
-            if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
+            if Hashcat.budget_exhausted():
                 break
             Color.clear_entire_line()
             Color.pattack('PMKID', self.target, 'CN-OPT',

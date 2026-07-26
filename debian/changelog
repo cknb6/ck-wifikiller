@@ -1,3 +1,12 @@
+ck-wifikiller (2.5.6-1) unstable; urgency=medium
+
+  * Schedule: capture-first full slice; crack uses remaining path wall-clock only.
+  * Weighted path slices (handshake/PMKID > PIN); default target budget 90s.
+  * Handshake: deauth interval synced to capture window; deauth at start.
+  * aircrack/hashcat respect path deadline; runtime 0 skips crack when budget exhausted.
+
+ -- 传康Kk <1837620622@qq.com>  Sun, 26 Jul 2026 14:00:00 +0800
+
 ck-wifikiller (2.5.5-1) unstable; urgency=medium
 
   * Closed loop: --auto scans then attacks all targets (no interactive select).

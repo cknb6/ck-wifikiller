@@ -114,7 +114,7 @@ class Arguments(object):
             metavar='[sec]',
             type=int,
             help=Color.s('Max seconds per AP across all paths '
-                '(default: {G}%d{W}; raised if needed so each path gets min slice)'
+                '(default: {G}%d{W}; weighted slices; raised so each path gets min slice)'
                 % self.config.target_timeout))
 
         glob.add_argument('--attack-min',
