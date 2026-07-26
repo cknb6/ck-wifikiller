@@ -249,14 +249,14 @@ class AttackAll(object):
             Configuration.wps_pixie_timeout = seconds
         elif name == 'handshake':
             Configuration.wpa_attack_timeout = seconds
-            # 静默监听：默认 4s；切片短时略缩、长时最多 6s
-            # 保证捕获窗内至少能完成 1～2 个「爆发+静默」周期
-            base_listen = int(getattr(Configuration, 'wpa_deauth_listen', 4) or 4)
-            listen = max(3, min(6, base_listen))
-            if seconds < 20:
-                listen = min(listen, max(3, seconds // 5))
+            # 静默监听：默认 10s；保证切片内至少 1 个「爆发+静默」
+            base_listen = int(getattr(Configuration, 'wpa_deauth_listen', 10) or 10)
+            listen = max(8, min(15, base_listen))
+            # 切片很短时略缩，但不低于 6s（否则 EAPOL 窗口不够）
+            if seconds < 30:
+                listen = min(listen, max(6, seconds // 3))
             Configuration.wpa_deauth_listen = listen
-            Configuration.wpa_deauth_timeout = listen  # 兼容旧字段
+            Configuration.wpa_deauth_timeout = listen
         elif name == 'wep':
             Configuration.wep_timeout = seconds
 

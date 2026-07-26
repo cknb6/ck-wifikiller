@@ -58,10 +58,10 @@ class TestAttackSchedule(unittest.TestCase):
 
         AttackAll._apply_timeouts('handshake', 45, deadline)
         self.assertEqual(Configuration.wpa_attack_timeout, 45)
-        # 静默监听 3~6s，且必须短于捕获窗口
+        # 静默监听约 8~15s（默认 10），且必须短于捕获窗口
         self.assertLess(Configuration.wpa_deauth_listen, Configuration.wpa_attack_timeout)
-        self.assertGreaterEqual(Configuration.wpa_deauth_listen, 3)
-        self.assertLessEqual(Configuration.wpa_deauth_listen, 6)
+        self.assertGreaterEqual(Configuration.wpa_deauth_listen, 6)
+        self.assertLessEqual(Configuration.wpa_deauth_listen, 15)
         self.assertEqual(Configuration.wpa_deauth_timeout, Configuration.wpa_deauth_listen)
 
     def test_hashcat_runtime_from_deadline(self):

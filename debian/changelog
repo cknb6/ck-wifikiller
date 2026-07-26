@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.21-1) unstable; urgency=medium
+
+  * Deauth: 4-round burst then 10s quiet listen for EAPOL.
+  * NIC-aware inject: mt76/ath/realtek/intel/broadcom profiles pick
+    scapy and/or aireplay density so kicks land more reliably.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 21:00:00 +0800
+
 ck-wifikiller (2.5.20-1) unstable; urgency=medium
 
   * Modernize all attack paths for Kali 2025–2026 toolchains.

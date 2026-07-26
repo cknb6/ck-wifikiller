@@ -132,16 +132,23 @@ class TestDeauthEngine(unittest.TestCase):
         Configuration.deauth_engine = 'auto'
         with patch.object(ScapyDeauth, 'available', return_value=True), \
                 patch.object(ScapyDeauth, 'deauth', return_value=256) as sc, \
-                patch('ck_wifikiller.tools.deauth.Aireplay.deauth') as ar:
+                patch('ck_wifikiller.tools.deauth.Aireplay.deauth') as ar, \
+                patch('ck_wifikiller.tools.deauth.get_deauth_profile') as gp:
+            from ck_wifikiller.tools.nic_profile import DeauthProfile
+            gp.return_value = DeauthProfile(
+                name='test', engine='both', per_dir=0, rounds=4, inter=0.003,
+                aireplay_count=16, aireplay_after_scapy=True, note='t')
             r = deauth_mod.send_deauth(
                 'AA:BB:CC:DD:EE:FF', client_mac='11:22:33:44:55:66')
         self.assertEqual(r['scapy'], 256)
         self.assertTrue(r['aireplay'])
         sc.assert_called_once()
         ar.assert_called_once()
+        # Scapy 成功后 aireplay 补刀：4~16 包（按网卡 profile）
         n = ar.call_args.kwargs.get('num_deauths')
         if n is not None:
-            self.assertLessEqual(n, 4)
+            self.assertGreaterEqual(n, 4)
+            self.assertLessEqual(n, 16)
 
     def test_aireplay_only(self):
         Configuration.deauth_engine = 'aireplay'

@@ -390,7 +390,7 @@ class Arguments(object):
             help=self._verbose(
                 'Same as quiet listen after deauth volley '
                 '(default: {G}%d{W})'
-                % getattr(self.config, 'wpa_deauth_listen', 4)))
+                % getattr(self.config, 'wpa_deauth_listen', 10)))
 
         wpa.add_argument('--wpat',
             action='store',

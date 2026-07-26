@@ -218,10 +218,13 @@ class AttackWPA(Attack):
             #   爆发 deauth×rounds（默认 4）→ 静默监听 listen 秒（默认 4）→ 再爆发
             # 静默期禁止再踢：给客户端重连完成 4-way EAPOL 的窗口
             listen_secs = float(getattr(Configuration, 'wpa_deauth_listen', None)
-                                or getattr(Configuration, 'wpa_deauth_timeout', 4)
-                                or 4)
-            listen_secs = max(3.0, min(8.0, listen_secs))
+                                or getattr(Configuration, 'wpa_deauth_timeout', 10)
+                                or 10)
+            # 默认 10s 静默；允许 6–30s
+            listen_secs = max(6.0, min(30.0, listen_secs))
             rounds = int(getattr(Configuration, 'scapy_deauth_rounds', 4) or 4)
+            if rounds <= 0:
+                rounds = 4
             cycle = 0
 
             while handshake is None and not timeout_timer.ended():

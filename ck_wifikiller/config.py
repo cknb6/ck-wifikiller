@@ -56,12 +56,12 @@ class Configuration(object):
         # Scapy 突发（对齐 auto_attack.py / MT7921U）:
         #   0 = 自动（精准每向 16、广播每向 32）；>0 强制每向份数
         #   rounds=4 → 每目标约 64×4=256 帧/次爆发；inter=0.003
-        # 周期: 爆发(×rounds) → 静默监听 wpa_deauth_listen 秒 → 再爆发
-        # （静默期纯收包等 EAPOL；连踢不听会打断客户端重连握手）
+        # 周期: 爆发(×rounds=4) → 静默监听 wpa_deauth_listen 秒 → 再爆发
+        # （静默期纯收包等 EAPOL；发包策略按网卡驱动自动选）
         cls.scapy_deauth_count = 0
         cls.scapy_deauth_rounds = 4
         cls.scapy_deauth_inter = 0.003
-        cls.wpa_deauth_listen = 4  # 爆发后静默秒数（默认 4s，参考脚本 5s）
+        cls.wpa_deauth_listen = 10  # 爆发后静默秒数（默认 10s，给足重连/EAPOL）
 
 
         cls.encryption_filter = ['WEP', 'WPA', 'WPS']
@@ -89,7 +89,7 @@ class Configuration(object):
         # WPA variables
         cls.wpa_filter = False # Only attack WPA networks
         # 兼容旧名：与 wpa_deauth_listen 同步；调度器会按切片微调 listen
-        cls.wpa_deauth_timeout = 4
+        cls.wpa_deauth_timeout = 10
         cls.wpa_attack_timeout = 45 # 单路径握手捕获下限 45s（调度器按切片覆盖）
         cls.wpa_handshake_dir = 'hs' # Dir to store handshakes
         cls.wpa_strip_handshake = False # Strip non-handshake packets
@@ -392,7 +392,7 @@ class Configuration(object):
             Color.pl('{+} {C}option:{W} after deauth volley, quiet listen '
                      '{G}%ds{W}' % cls.wpa_deauth_listen)
         if getattr(args, 'wpa_deauth_listen', None):
-            cls.wpa_deauth_listen = max(3, min(15, int(args.wpa_deauth_listen)))
+            cls.wpa_deauth_listen = max(5, min(30, int(args.wpa_deauth_listen)))
             cls.wpa_deauth_timeout = cls.wpa_deauth_listen
             Color.pl('{+} {C}option:{W} deauth quiet listen '
                      '{G}%ds{W}' % cls.wpa_deauth_listen)
