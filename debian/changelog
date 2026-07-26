@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.7-1) unstable; urgency=medium
+
+  * Deauth: Scapy bidirectional deauth/disassoc burst + aireplay dual channel.
+  * Default aireplay num_deauths 1 -> 8; --deauth-engine auto|both|scapy|aireplay.
+  * Stronger injection for weak USB NICs when python3-scapy is installed.
+
+ -- 传康Kk <1837620622@qq.com>  Sun, 26 Jul 2026 16:00:00 +0800
+
 ck-wifikiller (2.5.6-1) unstable; urgency=medium
 
   * Schedule: capture-first full slice; crack uses remaining path wall-clock only.

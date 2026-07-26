@@ -49,7 +49,14 @@ class Configuration(object):
         cls.show_bssids = False # Show BSSIDs in targets list
         cls.random_mac = False # Should generate a random Mac address at startup.
         cls.no_deauth = False # Deauth hidden networks & WPA handshake targets
-        cls.num_deauths = 1 # Number of deauth packets to send to each target.
+        # aireplay -0 包数：默认 1 太弱，提高到 8
+        cls.num_deauths = 8
+        # deauth 引擎：auto=有 scapy 则双通道，both/scapy/aireplay
+        cls.deauth_engine = 'auto'
+        # Scapy 突发：每方向帧数 / 帧间隔(s) / 802.11 reason
+        cls.scapy_deauth_count = 32
+        cls.scapy_deauth_inter = 0.002
+        cls.scapy_deauth_reason = 7
 
         cls.encryption_filter = ['WEP', 'WPA', 'WPS']
 
@@ -259,6 +266,19 @@ class Configuration(object):
             cls.num_deauths = args.num_deauths
             Color.pl('{+} {C}option:{W} send {G}%d{W} deauth packets when deauthing' % (
                 cls.num_deauths))
+
+        if getattr(args, 'deauth_engine', None):
+            eng = str(args.deauth_engine).strip().lower()
+            if eng in ('auto', 'both', 'scapy', 'aireplay'):
+                cls.deauth_engine = eng
+                Color.pl('{+} {C}option:{W} deauth engine {G}%s{W}' % cls.deauth_engine)
+
+        if getattr(args, 'scapy_deauth_count', None):
+            try:
+                cls.scapy_deauth_count = max(4, min(256, int(args.scapy_deauth_count)))
+                Color.pl('{+} {C}option:{W} scapy deauth burst {G}%d{W}/dir' % cls.scapy_deauth_count)
+            except (TypeError, ValueError):
+                pass
 
         if args.target_essid:
             cls.target_essid = args.target_essid

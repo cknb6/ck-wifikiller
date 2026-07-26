@@ -18,7 +18,7 @@ Depends: ${python3:Depends}, ${misc:Depends},
  tshark | wireshark-common,
  iw,
  net-tools
-Recommends: reaver, bully, macchanger, kismet, bettercap
+Recommends: reaver, bully, macchanger, kismet, bettercap, python3-scapy
 Description: Automated wireless auditor for modern Kali (wifite2 fork)
  ck-wifikiller is a maintained fork of wifite2 focused on Kali Linux
  2024-2026 toolchains: hashcat mode 22000, hcxpcapngtool, PMKID capture

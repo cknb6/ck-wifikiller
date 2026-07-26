@@ -182,8 +182,24 @@ class Arguments(object):
             dest='num_deauths',
             metavar='[num]',
             default=None,
-            help=self._verbose('Number of deauth packets to send (default: ' +
+            help=self._verbose('aireplay deauth packet count (default: ' +
                 '{G}%d{W})' % self.config.num_deauths))
+
+        glob.add_argument('--deauth-engine',
+            action='store',
+            dest='deauth_engine',
+            metavar='auto|both|scapy|aireplay',
+            type=str,
+            help=Color.s('Deauth inject engine (default: {G}auto{W}=scapy+aireplay '
+                'when python3-scapy present; stronger on weak USB NICs)'))
+
+        glob.add_argument('--scapy-deauth',
+            action='store',
+            dest='scapy_deauth_count',
+            metavar='[n]',
+            type=int,
+            help=self._verbose('Scapy frames per direction (default: {G}%d{W})'
+                % getattr(self.config, 'scapy_deauth_count', 32)))
 
 
     def _add_eviltwin_args(self, group):

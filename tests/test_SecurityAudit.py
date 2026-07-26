@@ -69,11 +69,12 @@ class TestTempPathSafety(unittest.TestCase):
 
 class TestDeauthUsesStationMac(unittest.TestCase):
     def test_decloak_deauth_targets_client_station(self):
+        '''隐藏 SSID deauth 必须打 station MAC，不能打 AP BSSID。'''
         calls = []
 
-        class FakeProcess:
-            def __init__(self, command, **kwargs):
-                calls.append(command)
+        def fake_send_deauth(bssid, client_mac=None, essid=None, timeout=2):
+            calls.append({'bssid': bssid, 'client': client_mac})
+            return {'scapy': 0, 'aireplay': True}
 
         target = SimpleNamespace(
             bssid='AA:BB:CC:DD:EE:FE',
@@ -89,20 +90,17 @@ class TestDeauthUsesStationMac(unittest.TestCase):
         dump.decloaked_times = {}
 
         with patch.object(Configuration, 'no_deauth', False, create=True), \
-                patch.object(Configuration, 'num_deauths', 1, create=True), \
                 patch.object(Configuration, 'interface', 'wlan0mon', create=True), \
                 patch.object(Configuration, 'verbose', 0, create=True), \
-                patch('ck_wifikiller.tools.airodump.Process', FakeProcess), \
+                patch('ck_wifikiller.tools.deauth.send_deauth', fake_send_deauth), \
                 patch('ck_wifikiller.tools.airodump.time.time', return_value=1000):
             dump.deauth_hidden_targets()
 
         self.assertGreaterEqual(len(calls), 2)
-        client_cmds = [c for c in calls if '-c' in c]
-        self.assertTrue(client_cmds)
-        for cmd in client_cmds:
-            idx = cmd.index('-c')
-            self.assertEqual(cmd[idx + 1], '11:22:33:44:55:66')
-            self.assertNotEqual(cmd[idx + 1], target.bssid)
+        # 广播 + 客户端
+        clients = [c['client'] for c in calls if c['client']]
+        self.assertIn('11:22:33:44:55:66', clients)
+        self.assertNotIn(target.bssid, clients)
 
 
 class TestCrackResultRobustness(unittest.TestCase):

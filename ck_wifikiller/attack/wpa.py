@@ -300,12 +300,18 @@ class AttackWPA(Attack):
     def deauth(self, target):
         '''
             Sends deauthentication request to broadcast and every client of target.
+            Scapy 高密度双向帧 + aireplay 双通道（力度不足时的注入辅助）。
             Args:
                 target - The Target to deauth, including clients.
         '''
-        if Configuration.no_deauth: return
+        if Configuration.no_deauth:
+            return
 
-        for index, client in enumerate([None] + self.clients):
+        from ..tools.deauth import send_deauth
+
+        # 广播 + 每个已知客户端；优先踢已知 STA（注入更准）
+        targets = list(self.clients) + [None]
+        for client in targets:
             if client is None:
                 target_name = '*broadcast*'
             else:
@@ -314,8 +320,13 @@ class AttackWPA(Attack):
             Color.pattack('WPA',
                     target,
                     'Handshake capture',
-                    'Deauthing {O}%s{W}' % target_name)
-            Aireplay.deauth(target.bssid, client_mac=client, timeout=2)
+                    'Deauth {O}%s{W}' % target_name)
+            send_deauth(
+                target.bssid,
+                client_mac=client,
+                essid=target.essid if getattr(target, 'essid_known', False) else None,
+                timeout=2,
+            )
 
 if __name__ == '__main__':
     Configuration.initialize(True)

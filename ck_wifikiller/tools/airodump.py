@@ -294,13 +294,8 @@ class Airodump(Dependency):
         if self.channel is None:
             return  # Do not deauth if channel is not fixed.
 
-        # Reusable deauth command
-        deauth_cmd = [
-            'aireplay-ng',
-            '-0', # Deauthentication
-            str(Configuration.num_deauths), # Number of deauth packets to send
-            '--ignore-negative-one'
-        ]
+        from .deauth import send_deauth
+        from ..util.validate import is_mac_address
 
         for target in self.targets:
             if target.essid_known:
@@ -318,18 +313,13 @@ class Airodump(Dependency):
                 from ..util.color import Color
                 Color.pe('{C} [?] Deauthing %s (broadcast & %d clients){W}' % (target.bssid, len(target.clients)))
 
-            # Deauth broadcast
-            iface = Configuration.interface
-            Process(deauth_cmd + ['-a', target.bssid, iface])
-
-            # Deauth clients：-c 必须是客户端 Station MAC，不是 AP 的 BSSID。
-            # 旧代码误用 client.bssid（等于 AP），导致隐藏 SSID 去认证对客户端无效。
-            from ..util.validate import is_mac_address
+            # Scapy 突发 + aireplay；客户端必须用 station MAC
+            send_deauth(target.bssid, client_mac=None, timeout=1.5)
             for client in target.clients:
                 station = getattr(client, 'station', None)
                 if not station or not is_mac_address(station):
                     continue
-                Process(deauth_cmd + ['-a', target.bssid, '-c', station, iface])
+                send_deauth(target.bssid, client_mac=station, timeout=1.5)
 
 if __name__ == '__main__':
     ''' Example usage. wlan0mon should be in Monitor Mode '''
