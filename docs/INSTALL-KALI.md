@@ -48,8 +48,8 @@ ls /etc/apt/sources.list.d/
 ## 方式 B：GitHub Release `.deb`（不配源）
 
 ```bash
-curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.4/ck-wifikiller_2.5.4_all.deb
-sudo apt install -y ./ck-wifikiller_2.5.4_all.deb
+curl -LO https://github.com/cknb6/ck-wifikiller/releases/download/v2.5.5/ck-wifikiller_2.5.5_all.deb
+sudo apt install -y ./ck-wifikiller_2.5.5_all.deb
 ```
 
 若 tag 尚未构建完成，打开 Releases 页面下载最新 `.deb`：
@@ -78,6 +78,8 @@ sudo apt install -y aircrack-ng hashcat hcxtools hcxdumptool tshark reaver bully
 
 ```bash
 sudo ck-wifikiller
+sudo ck-wifikiller --auto
+sudo ck-wifikiller -p 20
 sudo ck-wifikiller --recon status
 sudo ck-wifikiller --pmkid
 sudo ck-wifikiller --cn
@@ -91,8 +93,8 @@ sudo ck-wifikiller --no-update
 Tag 触发 GitHub Actions：构建 `.deb` → 更新 `gh-pages` apt 仓库 → 创建 Release。
 
 ```bash
-git tag v2.5.4
-git push origin v2.5.4
+git tag v2.5.5
+git push origin v2.5.5
 ```
 
 本地构建（可选）：

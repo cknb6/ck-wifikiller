@@ -13,6 +13,7 @@ from .pmkid import AttackPMKID
 from ..config import Configuration
 from ..model.target import WPSState
 from ..util.color import Color
+from ..util.i18n import t
 
 
 class AttackAll(object):
@@ -37,7 +38,7 @@ class AttackAll(object):
     @classmethod
     def attack_multiple(cls, targets):
         if any(getattr(t, 'wps', 0) for t in targets) and not AttackWPS.can_attack_wps():
-            Color.pl('{!} {O}WPS tools missing (reaver/bully){W}')
+            Color.pl('{!} {O}%s{W}' % t('atk.wps_note'))
 
         attacked_targets = 0
         targets_remaining = len(targets)
@@ -47,8 +48,7 @@ class AttackAll(object):
 
             bssid = target.bssid
             essid = target.essid if target.essid_known else 'hidden'
-            Color.pl('\n{+} ({G}%d{W}/{G}%d{W}) {C}%s{W} ({C}%s{W})' % (
-                index, len(targets), essid, bssid))
+            Color.pl('\n{+} %s' % t('atk.start', index, len(targets), essid, bssid))
 
             should_continue = cls.attack_single(target, targets_remaining)
             if not should_continue:
@@ -62,23 +62,27 @@ class AttackAll(object):
         - 按品牌排序攻击路径（不默认跳过 PIN / Pixie / PMKID）
         - 每条路径至少 attack_min_slice 秒（默认 15）
         - 单目标预算 target_timeout（默认 60；不够则抬到 n×15）
+        - path_deadline 墙钟截止，爆破用 hashcat --runtime 纳入切片
         '''
         cls._print_target_brief(target)
         queue = cls._build_attack_queue(target)
         if not queue:
-            Color.pl('{!} {R}no attack available{W}')
+            Color.pl('{!} {R}%s{W}' % t('atk.none'))
             return True
 
         names = [n for n, _ in queue]
         slices = cls._allocate_time_slices(len(queue))
-        Color.pl('{+} {D}plan: %s{W}' % ' | '.join(
-            '%s %ds' % (n, s) for n, s in zip(names, slices)))
+        Color.pl('{+} {D}%s{W}' % t(
+            'atk.plan',
+            ' | '.join('%s %ds' % (n, s) for n, s in zip(names, slices))))
 
         saved = {
             'pmkid': Configuration.pmkid_timeout,
             'pixie': Configuration.wps_pixie_timeout,
             'wpa': Configuration.wpa_attack_timeout,
             'pin': getattr(Configuration, 'wps_pin_timeout', 60),
+            'deadline': getattr(Configuration, 'path_deadline', None),
+            'hashcat_rt': getattr(Configuration, 'hashcat_runtime', 0),
         }
 
         attack = None
@@ -89,10 +93,11 @@ class AttackAll(object):
             for (name, attack_obj), slice_sec in zip(queue, slices):
                 remain = int(deadline - time.time())
                 if remain < 1:
-                    Color.pl('{!} {O}target budget used, next AP{W}')
+                    Color.pl('{!} {O}%s{W}' % t('atk.budget_done'))
                     break
                 slice_sec = max(1, min(slice_sec, remain))
-                cls._apply_timeouts(name, slice_sec)
+                path_deadline = time.time() + slice_sec
+                cls._apply_timeouts(name, slice_sec, path_deadline)
                 Color.pl('{+} {C}%s{W} {D}(%ds){W}' % (name, slice_sec))
 
                 try:
@@ -101,7 +106,10 @@ class AttackAll(object):
                     if result:
                         break
                 except KeyboardInterrupt:
-                    Color.pl('\n{!} {O}Interrupted{W}\n')
+                    Color.pl('\n{!} {O}%s{W}\n' % t('interrupted'))
+                    # --auto 闭环：中断时默认跳过当前目标，不交互
+                    if getattr(Configuration, 'auto_attack', False) or Configuration.scan_time > 0:
+                        return True
                     answer = cls.user_wants_to_continue(
                         targets_remaining, max(0, len(queue) - 1))
                     if answer is True:
@@ -118,6 +126,8 @@ class AttackAll(object):
             Configuration.wps_pixie_timeout = saved['pixie']
             Configuration.wpa_attack_timeout = saved['wpa']
             Configuration.wps_pin_timeout = saved['pin']
+            Configuration.path_deadline = saved['deadline']
+            Configuration.hashcat_runtime = saved['hashcat_rt']
 
         if (attack is not None
                 and getattr(attack, 'success', False)
@@ -141,19 +151,32 @@ class AttackAll(object):
         return [base + (1 if i < rem else 0) for i in range(n)]
 
     @staticmethod
-    def _apply_timeouts(name: str, seconds: int) -> None:
+    def _apply_timeouts(name: str, seconds: int, path_deadline: float | None = None) -> None:
         # 切片已在分配阶段保证 >= min_slice；此处只保证正数，
         # 不把剩余不足 15s 的尾巴再强行抬回 15（避免拖垮总预算）。
         seconds = max(1, int(seconds))
+        # 捕获占大部分切片，爆破用剩余墙钟（hashcat --runtime）
+        # 捕获最多 ~70%，至少留 5s 给爆破（若切片够）
+        if seconds >= 20:
+            capture = max(10, int(seconds * 0.7))
+            crack_budget = max(5, seconds - capture)
+        else:
+            capture = max(1, seconds - 3) if seconds > 5 else seconds
+            crack_budget = max(1, seconds - capture) if seconds > 5 else 0
+
+        Configuration.path_deadline = path_deadline
+        Configuration.hashcat_runtime = crack_budget
+
         if name == 'pmkid':
-            Configuration.pmkid_timeout = seconds
+            # PMKID：捕获用 capture；爆破靠 path_deadline
+            Configuration.pmkid_timeout = capture if crack_budget else seconds
         elif name == 'wps_pixie':
             Configuration.wps_pixie_timeout = seconds
         elif name == 'wps_pin':
             Configuration.wps_pin_timeout = seconds
             Configuration.wps_pixie_timeout = seconds
         elif name == 'handshake':
-            Configuration.wpa_attack_timeout = seconds
+            Configuration.wpa_attack_timeout = capture if crack_budget else seconds
         elif name == 'wep':
             Configuration.wep_timeout = seconds
 
@@ -174,9 +197,9 @@ class AttackAll(object):
             Color.pl(msg)
         try:
             if target.is_wpa3_transition():
-                Color.pl('{!} {O}WPA3 transition (SAE+PSK){W}')
+                Color.pl('{!} {O}%s{W}' % t('atk.wpa3_trans'))
             elif target.is_wpa3_sae():
-                Color.pl('{!} {O}WPA3-SAE{W}')
+                Color.pl('{!} {O}%s{W}' % t('atk.wpa3_sae'))
         except Exception:
             pass
 
@@ -236,14 +259,13 @@ class AttackAll(object):
 
         parts = []
         if attacks_remaining > 0:
-            parts.append(Color.s('{C}%d{W} attack(s)' % attacks_remaining))
+            parts.append('%d attack(s)' % attacks_remaining)
         if targets_remaining > 0:
-            parts.append(Color.s('{C}%d{W} target(s)' % targets_remaining))
-        Color.pl('{+} %s remain' % ' / '.join(parts))
+            parts.append('%d target(s)' % targets_remaining)
+        left = ' / '.join(parts)
 
         from ..util.input import raw_input
-        answer = raw_input(Color.s(
-            '{+} [c]ontinue / [s]kip target / [e]xit? {C}')).lower()
+        answer = raw_input(Color.s('{+} ' + t('atk.cont', left))).lower()
         if answer.startswith('s'):
             return None
         if answer.startswith('e'):

@@ -197,8 +197,8 @@ class Scanner(object):
                 + ' You may need to wait longer,'
                 + ' or you may have issues with your wifi card')
 
-        # Return all targets if user specified a wait time ('pillage').
-        if Configuration.scan_time > 0:
+        # 闭环：pillage (-p) / --auto 扫完即打全部，不交互选目标
+        if Configuration.scan_time > 0 or getattr(Configuration, 'auto_attack', False):
             return self.targets
 
         # Ask user for targets.
@@ -208,10 +208,8 @@ class Scanner(object):
         if self.err_msg is not None:
             Color.pl(self.err_msg)
 
-        input_str  = '{+} select target(s)'
-        input_str += ' ({G}1-%d{W})' % len(self.targets)
-        input_str += ' separated by commas, dashes'
-        input_str += ' or {G}all{W}: '
+        from .i18n import t
+        input_str = '{+} ' + t('scan.select', len(self.targets))
 
         chosen_targets = []
 
@@ -222,7 +220,7 @@ class Scanner(object):
                 break
             if '-' in choice:
                 # User selected a range
-                (lower,upper) = [int(x) - 1 for x in choice.split('-')]
+                (lower, upper) = [int(x) - 1 for x in choice.split('-')]
                 for i in xrange(lower, min(len(self.targets), upper + 1)):
                     chosen_targets.append(self.targets[i])
             elif choice.isdigit():

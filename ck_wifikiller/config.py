@@ -85,6 +85,10 @@ class Configuration(object):
         # 4 条路径 × 15s = 60s；不够 min 时自动抬高总预算
         cls.target_timeout = 60
         cls.attack_min_slice = 15
+        # 闭环：--auto 扫完即打全部；path_deadline 给 hashcat --runtime
+        cls.auto_attack = False
+        cls.path_deadline = None  # float unix ts，当前路径墙钟截止
+        cls.hashcat_runtime = 0   # 0=不限；>0 传给 hashcat --runtime
 
         # PMKID variables
         cls.use_pmkid_only = False  # Only use PMKID Capture+Crack attack
@@ -273,6 +277,14 @@ class Configuration(object):
             cls.scan_time = args.scan_time
             Color.pl('{+} {C}option:{W} ({G}pillage{W}) attack all targets ' +
                 'after {G}%d{W}s' % args.scan_time)
+
+        if getattr(args, 'auto_attack', False):
+            cls.auto_attack = True
+            # 未指定 -p 时给默认扫描窗口，扫完直接打 all
+            if not cls.scan_time:
+                cls.scan_time = 15
+            Color.pl('{+} {C}option:{W} ({G}auto{W}) scan {G}%ds{W} then attack all'
+                     % cls.scan_time)
 
         if args.verbose:
             cls.verbose = args.verbose

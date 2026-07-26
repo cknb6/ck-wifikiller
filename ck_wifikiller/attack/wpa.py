@@ -7,6 +7,7 @@ from ..tools.airodump import Airodump
 from ..tools.aireplay import Aireplay
 from ..config import Configuration
 from ..util.color import Color
+from ..util.i18n import t
 from ..util.process import Process
 from ..util.timer import Timer
 from ..model.handshake import Handshake
@@ -29,7 +30,7 @@ class AttackWPA(Attack):
 
         # Skip if user only wants WPS attacks
         if Configuration.wps_only:
-            Color.pl('\r{!} {O}Skipping WPA-Handshake attack on {R}%s{O} because {R}--wps-only{O} is set{W}' % self.target.essid)
+            Color.pl('\r{!} {O}%s{W}' % t('wpa.skip_wps_only'))
             self.success = False
             return self.success
 
@@ -47,29 +48,27 @@ class AttackWPA(Attack):
             return self.success
 
         # Analyze handshake
-        Color.pl('\n{+} analysis of captured handshake file:')
+        Color.pl('\n{+} %s' % t('wpa.analyze'))
         handshake.analyze()
 
         # Check wordlist
         if Configuration.wordlist is None:
-            Color.pl('{!} {O}Not cracking handshake because' +
-                     ' wordlist ({R}--dict{O}) is not set')
+            Color.pl('{!} {O}%s{W}' % t('wpa.no_wordlist'))
             self.success = False
             return False
 
         elif not os.path.exists(Configuration.wordlist):
-            Color.pl('{!} {O}Not cracking handshake because' +
-                     ' wordlist {R}%s{O} was not found' % Configuration.wordlist)
+            Color.pl('{!} {O}%s{W}' % t('wpa.wordlist_missing', Configuration.wordlist))
             self.success = False
             return False
 
-        Color.pl('\n{+} {C}Cracking WPA Handshake:{W} Running {C}aircrack-ng{W} with' +
-                ' {C}%s{W} wordlist' % os.path.split(Configuration.wordlist)[-1])
+        wl_name = os.path.split(Configuration.wordlist)[-1]
+        Color.pl('\n{+} {C}%s{W}' % t('wpa.crack', wl_name))
 
         # Crack it
         key = Aircrack.crack_handshake(handshake, show_command=False)
         if key is None:
-            Color.pl('{!} {R}Failed to crack handshake: {O}%s{R} did not contain password{W}' % Configuration.wordlist.split(os.sep)[-1])
+            Color.pl('{!} {R}%s{W}' % t('wpa.fail'))
             # 国内 WiFi 智能优化：aircrack 字典失败后，转 hc22000 走 hashcat 掩码管线（闭环）
             if getattr(Configuration, 'cn_optimize', False):
                 key = self._cn_mask_pipeline(handshake)
@@ -78,7 +77,7 @@ class AttackWPA(Attack):
             self.success = False
             return False
 
-        Color.pl('{+} {G}Cracked WPA Handshake{W} PSK: {G}%s{W}\n' % key)
+        Color.pl('{+} {G}%s{W}\n' % t('wpa.ok', key))
         self.crack_result = CrackResultWPA(
             handshake.bssid,
             handshake.essid,
@@ -92,23 +91,29 @@ class AttackWPA(Attack):
 
     def _cn_mask_pipeline(self, handshake):
         '''国内 WiFi 掩码自动管线：cap→hc22000→hashcat 多掩码爆破，命中即返回。'''
+        hc_file = None
         try:
             from ..tools.hashcat import HcxPcapTool, Hashcat
             from ..util.cn_strategy import recommend_masks
             from ..util.router_advisory import identify_vendor
             if not Process.exists('hashcat') or not HcxPcapTool.exists():
-                Color.pl('{!} {O}跳过 CN 掩码管线: 缺少 hashcat/hcxpcapngtool{W}')
+                Color.pl('{!} {O}%s{W}' % t('wpa.cn_skip'))
+                return None
+            # 路径预算已尽则跳过
+            if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
                 return None
             hc_file = HcxPcapTool.generate_hc22000_file(handshake.capfile)
         except Exception as e:
-            Color.pl('{!} {O}CN 掩码管线转换失败: {R}%s{W}' % str(e))
+            Color.pl('{!} {O}%s{W}' % t('wpa.cn_fail', str(e)))
             return None
         try:
             vendor = identify_vendor(self.target.bssid) or ''
             masks = recommend_masks(self.target.essid, vendor,
                                     limit=getattr(Configuration, 'cn_mask_limit', 4))
-            Color.pl('{+} {O}国内掩码管线 / CN mask pipeline: {C}%d 阶段{W}' % len(masks))
+            Color.pl('{+} {O}%s{W}' % t('wpa.cn_run', len(masks)))
             for idx, mask in enumerate(masks, 1):
+                if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
+                    break
                 Color.pl('{+} {C}CN-OPT{W} mask {C}%d/%d{W} {D}%s{W} ...' % (idx, len(masks), mask))
                 key = Hashcat.crack_hc22000_mask(hc_file, mask, verbose=False)
                 if key:
@@ -214,7 +219,7 @@ class AttackWPA(Attack):
 
         if handshake is None:
             # No handshake, attack failed.
-            Color.pl('\n{!} {O}WPA handshake capture {R}FAILED:{O} Timed out after %d seconds' % (Configuration.wpa_attack_timeout))
+            Color.pl('\n{!} {O}%s{W}' % t('wpa.capture_fail', Configuration.wpa_attack_timeout))
             return handshake
         else:
             # Save copy of handshake to ./hs/

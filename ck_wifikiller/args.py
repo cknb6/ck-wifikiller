@@ -95,6 +95,13 @@ class Arguments(object):
         glob.add_argument('--pillage', help=argparse.SUPPRESS, action='store',
                 dest='scan_time', nargs='?', const=10, type=int)
 
+        # 闭环自动化：扫描后不交互，直接打全部目标
+        glob.add_argument('--auto',
+            action='store_true',
+            dest='auto_attack',
+            help=Color.s('Auto mode: scan then attack {G}all{W} targets '
+                '(default scan {G}15s{W} if -p not set; no interactive select)'))
+
         glob.add_argument('--kill',
             action='store_true',
             dest='kill_conflicting_processes',

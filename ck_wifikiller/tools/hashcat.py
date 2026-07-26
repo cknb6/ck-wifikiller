@@ -65,6 +65,26 @@ class Hashcat(Dependency):
         return line.rsplit(':', 1)[-1].strip() or None
 
     @staticmethod
+    def _runtime_seconds() -> int:
+        """根据路径墙钟截止 / 显式 hashcat_runtime 计算 --runtime 秒数。
+
+        最佳实践 (hashcat docs): --runtime=N 在 N 秒后中止会话，
+        保证时间切片调度不会被字典/掩码拖垮。
+        """
+        import time as _time
+        deadline = getattr(Configuration, 'path_deadline', None)
+        if deadline is not None:
+            remain = int(deadline - _time.time())
+            if remain < 1:
+                return 1
+            return remain
+        try:
+            rt = int(getattr(Configuration, 'hashcat_runtime', 0) or 0)
+        except (TypeError, ValueError):
+            rt = 0
+        return max(0, rt)
+
+    @staticmethod
     def _extra_attack_args(is_mask: bool = False) -> list[str]:
         """按攻击模式构建 hashcat 附加参数，避免组合无效选项。"""
         extra: list[str] = []
@@ -82,6 +102,11 @@ class Hashcat(Dependency):
             extra.append('--increment')
             extra.extend(['--increment-min', '8'])
             extra.extend(['--increment-max', str(increment_max)])
+
+        # 时间预算：官方 --runtime 将爆破纳入路径切片
+        rt = Hashcat._runtime_seconds()
+        if rt > 0:
+            extra.extend(['--runtime', str(rt)])
 
         raw = getattr(Configuration, 'hashcat_extra_args', None)
         if raw:
@@ -230,7 +255,7 @@ class HcxDumpTool(Dependency):
 
         command: list[str]
         if modern or _which_first('hcxdumptool'):
-            # BPF: 目标 BSSID + 广播（保留 undirected probe，减少 hcxpcapngtool 警告）
+            # ZerBea: 现代版强制 BPF；exitoneapol 建议配合单目标 BPF
             bpf_path = Configuration.temp(f'pmkid-{bssid}.bpf')
             bpf_ok = self._build_bpf(bpf_path, bssid_colon)
             command = [
@@ -240,11 +265,14 @@ class HcxDumpTool(Dependency):
                 '-c', ch_arg,
             ]
             if bpf_ok:
-                command.extend(['--bpf', bpf_path])
-            # 前沿高效捕获：收到 PMKID(1)+EAPOL M2(2)+M3(4) 任一即自动退出，
-            # 避免冗余采集（hcxdumptool v6.0+ 官方推荐用法）。
-            if '--exitoneapol' in help_out:
-                command.extend(['--exitoneapol', '7'])
+                # 兼容 --bpf=path 与 --bpf path
+                if 'bpf=' in help_out.lower() and '--bpf ' not in help_out:
+                    command.append(f'--bpf={bpf_path}')
+                else:
+                    command.extend(['--bpf', bpf_path])
+                # bitmask 7 = PMKID|M1M2|M1M2M3；仅在 BPF 成功时启用（官方推荐）
+                if '--exitoneapol' in help_out:
+                    command.extend(['--exitoneapol', '7'])
             # 旧版兼容探测
             if '--filterlist' in help_out and not bpf_ok:
                 fl = Configuration.temp(f'pmkid-{bssid}.filterlist')
@@ -269,36 +297,55 @@ class HcxDumpTool(Dependency):
 
     @staticmethod
     def _build_bpf(bpf_path: str, bssid_colon: str) -> bool:
-        """优先 hcxdumptool --bpfc；失败则 tcpdump -ddd。"""
-        expr = (
-            f'wlan addr3 {bssid_colon} or wlan addr3 ff:ff:ff:ff:ff:ff'
-        )
-        # 内置编译器
-        p = Process(['hcxdumptool', f'--bpfc={expr}'])
-        p.wait()
-        out = (p.stdout() or '') + (p.stderr() or '')
-        # --bpfc 通常写 stdout
-        if out.strip() and 'error' not in out.lower()[:80]:
-            try:
-                with open(bpf_path, 'w', encoding='utf-8') as f:
-                    f.write(out if out.endswith('\n') else out + '\n')
-                if os.path.getsize(bpf_path) > 4:
-                    return True
-            except OSError:
-                pass
-        # tcpdump 回退：参数数组执行 + Python 文件对象重定向，杜绝 shell 注入
-        if shutil.which('tcpdump'):
-            try:
-                with open(bpf_path, 'w', encoding='utf-8') as fh:
-                    subprocess.run(
-                        ['tcpdump', '-s', '1024', '-y', 'IEEE802_11_RADIO',
-                         expr, '-ddd'],
-                        stdout=fh, stderr=subprocess.DEVNULL,
-                        check=False,
-                    )
-                return os.path.isfile(bpf_path) and os.path.getsize(bpf_path) > 4
-            except OSError:
-                return False
+        """构建单目标 BPF（ZerBea / hcxdumptool 官方实践）。
+
+        优先保留 undirected PROBEREQUEST（广播 addr3），否则 hcxpcapngtool
+        会警告缺帧、client-less 关联攻击变差：
+          wlan addr3 <BSSID> or wlan addr3 ff:ff:ff:ff:ff:ff
+        备选：目标 AP + 全部 probe-req（含 directed）。
+        编译：hcxdumptool --bpfc= 优先，失败 tcpdump -ddd。
+        """
+        # 规范 MAC（允许带冒号）
+        bssid_colon = bssid_colon.strip().lower()
+        exprs = [
+            # 经典：AP + 广播（undirected probe）
+            f'wlan addr3 {bssid_colon} or wlan addr3 ff:ff:ff:ff:ff:ff',
+            # 备选：AP + 全部 probe-req（ZerBea discussion #494）
+            f'wlan addr3 {bssid_colon} or (wlan type mgt and subtype probe-req)',
+            # 最严：仅 AP
+            f'wlan addr3 {bssid_colon}',
+        ]
+        for expr in exprs:
+            # 内置编译器
+            p = Process(['hcxdumptool', f'--bpfc={expr}'])
+            p.wait()
+            out = (p.stdout() or '')
+            err = (p.stderr() or '')
+            blob = out + err
+            if out.strip() and 'error' not in blob.lower()[:120]:
+                try:
+                    with open(bpf_path, 'w', encoding='utf-8') as f:
+                        f.write(out if out.endswith('\n') else out + '\n')
+                    if os.path.getsize(bpf_path) > 4:
+                        return True
+                except OSError:
+                    pass
+            # tcpdump 回退：-s 65535 -y IEEE802_11_RADIO（ZerBea 示例）
+            if shutil.which('tcpdump'):
+                try:
+                    with open(bpf_path, 'w', encoding='utf-8') as fh:
+                        r = subprocess.run(
+                            ['tcpdump', '-s', '65535', '-y', 'IEEE802_11_RADIO',
+                             expr, '-ddd'],
+                            stdout=fh, stderr=subprocess.DEVNULL,
+                            check=False,
+                        )
+                    if (r.returncode == 0
+                            and os.path.isfile(bpf_path)
+                            and os.path.getsize(bpf_path) > 4):
+                        return True
+                except OSError:
+                    continue
         return False
 
     def poll(self):

@@ -17,6 +17,7 @@ from ..model.attack import Attack
 from ..config import Configuration
 from ..tools.hashcat import HcxDumpTool, HcxPcapTool, Hashcat
 from ..util.color import Color
+from ..util.i18n import t
 from ..util.timer import Timer
 from ..model.pmkid_result import CrackResultPMKID
 
@@ -70,11 +71,6 @@ class AttackPMKID(Attack):
 
     def run(self):
         from ..util.process import Process
-        dependencies = [
-            Hashcat.dependency_name,
-            HcxDumpTool.dependency_name,
-            'hcxpcapngtool',  # 现代名；exists 在 HcxPcapTool 里做了双名
-        ]
         missing = []
         if not Process.exists('hashcat'):
             missing.append('hashcat')
@@ -83,8 +79,8 @@ class AttackPMKID(Attack):
         if not HcxPcapTool.exists():
             missing.append('hcxpcapngtool')
         if missing:
-            Color.pl('{!} Skipping PMKID attack, missing required tools: {O}%s{W}' % ', '.join(missing))
-            Color.pl('{!} {O}Kali: sudo apt install hashcat hcxdumptool hcxtools{W}')
+            Color.pl('{!} {O}%s{W}' % t('pmkid.skip', ', '.join(missing)))
+            Color.pl('{!} {O}%s{W}' % t('pmkid.install'))
             return False
 
         pmkid_file = None
@@ -92,7 +88,7 @@ class AttackPMKID(Attack):
             pmkid_file = self.get_existing_pmkid_file(self.target.bssid)
             if pmkid_file is not None:
                 Color.pattack('PMKID', self.target, 'CAPTURE',
-                              'Loaded {C}existing{W} hash: {C}%s{W}\n' % pmkid_file)
+                              t('pmkid.exist', pmkid_file) + '\n')
 
         if pmkid_file is None:
             pmkid_file = self.capture_pmkid()
@@ -103,7 +99,7 @@ class AttackPMKID(Attack):
         try:
             self.success = self.crack_pmkid_file(pmkid_file)
         except KeyboardInterrupt:
-            Color.pl('\n{!} {R}Failed to crack PMKID: {O}Cracking interrupted by user{W}')
+            Color.pl('\n{!} {R}%s{W}' % t('pmkid.interrupted'))
             self.success = False
             return False
 
@@ -125,7 +121,7 @@ class AttackPMKID(Attack):
             if pmkid_hash is not None:
                 break
             Color.pattack('PMKID', self.target, 'CAPTURE',
-                          'Waiting for PMKID ({C}%s{W})' % str(self.timer))
+                          t('pmkid.wait', str(self.timer)))
             time.sleep(1)
 
         self.keep_capturing = False
@@ -133,24 +129,23 @@ class AttackPMKID(Attack):
 
         if pmkid_hash is None:
             Color.pattack('PMKID', self.target, 'CAPTURE',
-                          '{R}Failed{O} to capture PMKID\n')
-            Color.pl('{!} {O}提示: 部分 AP 需客户端探测流量；可尝试关联/失败连接以触发{W}')
+                          '{R}%s{W}\n' % t('pmkid.fail'))
+            Color.pl('{!} {O}%s{W}' % t('pmkid.hint'))
             Color.pl('')
             return None
 
         Color.clear_entire_line()
-        Color.pattack('PMKID', self.target, 'CAPTURE', '{G}Captured PMKID/22000{W}')
+        Color.pattack('PMKID', self.target, 'CAPTURE', '{G}%s{W}' % t('pmkid.ok'))
         return self.save_pmkid(pmkid_hash)
 
     def crack_pmkid_file(self, pmkid_file):
         if Configuration.wordlist is None:
-            Color.pl('\n{!} {O}Not cracking PMKID '
-                     'because there is no {R}wordlist{O} (re-run with {C}--dict{O})')
+            Color.pl('\n{!} {O}%s{W}' % t('pmkid.no_wordlist'))
             key = None
         else:
             Color.clear_entire_line()
             Color.pattack('PMKID', self.target, 'CRACK',
-                          'hashcat -m 22000 + {C}%s{W} ...\n' % Configuration.wordlist)
+                          t('wpa.crack', 'hashcat -m 22000') + '\n')
             key = Hashcat.crack_pmkid(pmkid_file)
 
         # 国内 WiFi 智能优化：字典失败后自动追加国内常用掩码管线（闭环）
@@ -161,11 +156,11 @@ class AttackPMKID(Attack):
             if Configuration.wordlist is not None or getattr(Configuration, 'cn_optimize', False):
                 Color.clear_entire_line()
                 Color.pattack('PMKID', self.target, '{R}CRACK',
-                              '{R}Failed {O}Passphrase not found in dictionary/masks.\n')
+                              '{R}%s{W}\n' % t('pmkid.crack_fail'))
             return False
 
         Color.clear_entire_line()
-        Color.pattack('PMKID', self.target, 'CRACKED', '{C}Key: {G}%s{W}' % key)
+        Color.pattack('PMKID', self.target, 'CRACKED', '{C}%s{W}' % t('wpa.ok', key))
         self.crack_result = CrackResultPMKID(
             self.target.bssid, self.target.essid, pmkid_file, key)
         Color.pl('\n')
@@ -181,8 +176,10 @@ class AttackPMKID(Attack):
                                 limit=getattr(Configuration, 'cn_mask_limit', 4))
         Color.clear_entire_line()
         Color.pattack('PMKID', self.target, 'CN-OPT',
-                      '{O}国内掩码管线 / CN mask pipeline: {C}%d 阶段{W}\n' % len(masks))
+                      t('wpa.cn_run', len(masks)) + '\n')
         for idx, mask in enumerate(masks, 1):
+            if Hashcat._runtime_seconds() < 1 and getattr(Configuration, 'path_deadline', None):
+                break
             Color.clear_entire_line()
             Color.pattack('PMKID', self.target, 'CN-OPT',
                           'mask {C}%d/%d{W} {D}%s{W} ...\n' % (idx, len(masks), mask))

@@ -141,6 +141,14 @@ _S: dict[str, tuple[str, str]] = {
         '%s left — [c]ontinue [s]kip [e]xit? ',
         '剩余 %s — 继续[c] 跳过[s] 退出[e]? ',
     ),
+    'atk.plan': (
+        'plan: %s',
+        '计划: %s',
+    ),
+    'atk.budget_done': (
+        'target budget used, next AP',
+        '目标预算用尽，下一 AP',
+    ),
 
     # wpa/pmkid brief
     'wpa.skip_wps_only': (
@@ -150,6 +158,10 @@ _S: dict[str, tuple[str, str]] = {
     'wpa.no_wordlist': (
         'no wordlist, skip crack',
         '无字典，跳过爆破',
+    ),
+    'wpa.wordlist_missing': (
+        'wordlist not found: %s',
+        '字典不存在: %s',
     ),
     'wpa.crack': (
         'cracking with %s ...',
@@ -167,6 +179,10 @@ _S: dict[str, tuple[str, str]] = {
         'skip CN masks (need hashcat/hcxpcapngtool)',
         '跳过国内掩码（缺 hashcat/hcxpcapngtool）',
     ),
+    'wpa.cn_fail': (
+        'CN mask convert failed: %s',
+        '国内掩码转换失败: %s',
+    ),
     'wpa.cn_run': (
         'CN masks: %d stage(s)',
         '国内掩码: %d 阶段',
@@ -179,9 +195,17 @@ _S: dict[str, tuple[str, str]] = {
         'saved %s',
         '已保存 %s',
     ),
+    'wpa.analyze': (
+        'analysis of captured handshake:',
+        '分析已捕获握手:',
+    ),
     'pmkid.skip': (
         'skip PMKID (missing: %s)',
         '跳过 PMKID（缺少: %s）',
+    ),
+    'pmkid.install': (
+        'Kali: sudo apt install hashcat hcxdumptool hcxtools',
+        'Kali: sudo apt install hashcat hcxdumptool hcxtools',
     ),
     'pmkid.exist': (
         'use existing hash %s',
@@ -195,6 +219,10 @@ _S: dict[str, tuple[str, str]] = {
         'PMKID capture failed',
         'PMKID 捕获失败',
     ),
+    'pmkid.hint': (
+        'some APs need client probe traffic',
+        '部分 AP 需客户端探测流量',
+    ),
     'pmkid.ok': (
         'PMKID captured',
         '已捕获 PMKID',
@@ -202,6 +230,14 @@ _S: dict[str, tuple[str, str]] = {
     'pmkid.crack_fail': (
         'PMKID not cracked',
         'PMKID 未破解',
+    ),
+    'pmkid.interrupted': (
+        'PMKID crack interrupted',
+        'PMKID 爆破已中断',
+    ),
+    'pmkid.no_wordlist': (
+        'no wordlist, skip PMKID crack (--dict)',
+        '无字典，跳过 PMKID 爆破 (--dict)',
     ),
 
     # update
