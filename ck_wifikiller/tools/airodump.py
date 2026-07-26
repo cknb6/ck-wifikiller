@@ -255,6 +255,12 @@ class Airodump(Dependency):
         result = []
         # Filter based on Encryption
         for target in targets:
+            # 无名称 / 隐藏 SSID：字典与 hash 关联都依赖 ESSID，直接丢弃
+            if not Airodump._has_usable_essid(target):
+                # 仅当用户显式指定了该 BSSID 时才保留（高级用法）
+                want = getattr(Configuration, 'target_bssid', None)
+                if not want or want.lower() != (target.bssid or '').lower():
+                    continue
             if Configuration.clients_only and len(target.clients) == 0:
                 continue
             if 'WEP' in Configuration.encryption_filter and 'WEP' in target.encryption:
@@ -281,12 +287,26 @@ class Airodump(Dependency):
                 i += 1
         return result
 
+    @staticmethod
+    def _has_usable_essid(target):
+        '''有可显示、可用于爆破关联的 ESSID（非隐藏、非全空）。'''
+        if not getattr(target, 'essid_known', False):
+            return False
+        name = (getattr(target, 'essid', None) or '').strip()
+        if not name:
+            return False
+        # 全 \x00 或纯控制字符
+        if all(c == '\x00' or ord(c) < 32 for c in name):
+            return False
+        return True
+
     def deauth_hidden_targets(self):
         '''
-        Sends deauths (to broadcast and to each client) for all
-        targets (APs) that have unknown ESSIDs (hidden router names).
+        原 wifite：对隐藏 SSID 发 deauth 试图揭名。
+        实测噪声大、成功率低、还干扰列表刷新 —— 默认关闭。
         '''
         self.decloaking = False
+        return  # 隐藏 SSID 已在 filter 中剔除，不再尝试揭名
 
         if Configuration.no_deauth:
             return  # Do not deauth if requested

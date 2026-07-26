@@ -110,9 +110,10 @@ class AttackPMKID(Attack):
         self.keep_capturing = True
         self.timer = Timer(Configuration.pmkid_timeout)
 
-        t = Thread(target=self.dumptool_thread)
-        t.daemon = True
-        t.start()
+        # 注意：不可命名为 t，会遮蔽 util.i18n.t
+        dump_thread = Thread(target=self.dumptool_thread)
+        dump_thread.daemon = True
+        dump_thread.start()
 
         pmkid_hash = None
         pcaptool = HcxPcapTool(self.target)
@@ -129,7 +130,7 @@ class AttackPMKID(Attack):
             time.sleep(1)
 
         self.keep_capturing = False
-        t.join(timeout=3)
+        dump_thread.join(timeout=3)
 
         if pmkid_hash is None:
             Color.pattack('PMKID', self.target, 'CAPTURE',
@@ -212,7 +213,7 @@ class AttackPMKID(Attack):
         pmkid_file = 'pmkid_%s_%s_%s.hc22000' % (essid_safe, bssid_safe, date)
         pmkid_file = os.path.join(Configuration.wpa_handshake_dir, pmkid_file)
 
-        Color.p('\n{+} Saving {C}hc22000{W} hash to {C}%s{W} ' % pmkid_file)
+        Color.p('\n{+} %s ' % t('pmkid.save', pmkid_file))
         with open(pmkid_file, 'w', encoding='utf-8') as fh:
             fh.write(pmkid_hash.strip() + '\n')
         return pmkid_file

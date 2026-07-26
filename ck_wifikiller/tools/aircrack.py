@@ -4,6 +4,9 @@
 from .dependency import Dependency
 from ..util.process import Process
 from ..util.input import xrange
+from ..util.color import Color
+from ..util.i18n import t
+from ..util.timer import Timer
 from ..config import Configuration
 
 import os
@@ -82,8 +85,6 @@ class Aircrack(Dependency):
 
     @staticmethod
     def crack_handshake(handshake, show_command=False, max_seconds=None):
-        from ..util.color import Color
-        from ..util.timer import Timer
         '''Tries to crack a handshake. Returns WPA key if found, otherwise None.
 
         max_seconds: 墙钟上限（路径预算）；None 时若有 path_deadline 则跟截止时间。
@@ -115,7 +116,7 @@ class Aircrack(Dependency):
         aircrack_key_re  = re.compile(r'Current passphrase:\s*([^\s].*[^\s])\s*$')
         num_tried = num_total = 0
         percent = num_kps = 0.0
-        eta_str = 'unknown'
+        eta_str = '?'
         current_key = ''
         while crack_proc.poll() is None:
             if max_seconds is not None and (time.time() - start) >= max_seconds:
@@ -145,12 +146,9 @@ class Aircrack(Dependency):
             else:
                 continue
 
-            status = '\r{+} {C}Cracking WPA Handshake: %0.2f%%{W}' % percent
-            status += ' ETA: {C}%s{W}' % eta_str
-            status += ' @ {C}%0.1fkps{W}' % num_kps
-            status += ' (current key: {C}%s{W})' % current_key
             Color.clear_entire_line()
-            Color.p(status)
+            Color.p('\r{+} {C}%s{W}' % t(
+                'wpa.crack_prog', percent, eta_str, num_kps, current_key))
 
         Color.pl('')
 

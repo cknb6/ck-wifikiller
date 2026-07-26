@@ -135,6 +135,14 @@ _S: dict[str, tuple[str, str]] = {
         'no attack available',
         '无可用攻击',
     ),
+    'atk.skip_hidden': (
+        'skip %d hidden/unnamed AP(s)',
+        '跳过 %d 个隐藏/无名称 AP',
+    ),
+    'atk.none_named': (
+        'no named APs left to attack',
+        '没有带名称的 AP 可攻击',
+    ),
     'atk.wpa3_trans': (
         'WPA3 transition — may use WPA2 path',
         'WPA3 过渡模式 — 可走 WPA2',
@@ -213,6 +221,46 @@ _S: dict[str, tuple[str, str]] = {
         'analysis of captured handshake:',
         '分析已捕获握手:',
     ),
+    'wpa.hs_ok': (
+        '%s.cap contains a valid handshake for',
+        '%s.cap 含有效握手:',
+    ),
+    'wpa.hs_no': (
+        '%s.cap does not contain a valid handshake',
+        '%s.cap 未检出有效握手',
+    ),
+    'wpa.hs_ok_note': (
+        '(other tools confirmed; aircrack can disagree)',
+        '（其他工具已确认；aircrack 判定更严，可忽略）',
+    ),
+    'wpa.capturing': (
+        'listening (clients:%d, deauth:%s, timeout:%s)',
+        '监听中 (客户:%d, 断连:%s, 超时:%s)',
+    ),
+    'wpa.wait_target': (
+        'waiting for target...',
+        '等待目标出现...',
+    ),
+    'wpa.exist_hs': (
+        'found existing handshake for %s',
+        '发现已有握手 %s',
+    ),
+    'wpa.use_hs': (
+        'using handshake from %s',
+        '使用握手文件 %s',
+    ),
+    'wpa.captured': (
+        'captured handshake',
+        '已捕获握手',
+    ),
+    'wpa.new_client': (
+        'new client: %s',
+        '发现客户端: %s',
+    ),
+    'wpa.crack_prog': (
+        'cracking WPA: %0.2f%% ETA:%s @ %0.1fkps (key: %s)',
+        '爆破 WPA: %0.2f%% 剩余:%s @ %0.1fkps (当前: %s)',
+    ),
     'pmkid.skip': (
         'skip PMKID (missing: %s)',
         '跳过 PMKID（缺少: %s）',
@@ -252,6 +300,10 @@ _S: dict[str, tuple[str, str]] = {
     'pmkid.no_wordlist': (
         'no wordlist, skip PMKID crack (--dict)',
         '无字典，跳过 PMKID 爆破 (--dict)',
+    ),
+    'pmkid.save': (
+        'saving hc22000 hash to %s',
+        '保存 hc22000 哈希到 %s',
     ),
 
     # update

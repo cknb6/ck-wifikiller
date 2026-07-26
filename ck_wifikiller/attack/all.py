@@ -40,6 +40,17 @@ class AttackAll(object):
         if any(getattr(t, 'wps', 0) for t in targets) and not AttackWPS.can_attack_wps():
             Color.pl('{!} {O}%s{W}' % t('atk.wps_note'))
 
+        # 二次保险：只打有 ESSID 的目标（隐藏 SSID 无字典关联价值）
+        from ..tools.airodump import Airodump
+        named = [x for x in targets if Airodump._has_usable_essid(x)]
+        skipped = len(targets) - len(named)
+        if skipped > 0:
+            Color.pl('{!} {O}%s{W}' % t('atk.skip_hidden', skipped))
+        targets = named
+        if not targets:
+            Color.pl('{!} {R}%s{W}' % t('atk.none_named'))
+            return 0
+
         attacked_targets = 0
         targets_remaining = len(targets)
         for index, target in enumerate(targets, start=1):

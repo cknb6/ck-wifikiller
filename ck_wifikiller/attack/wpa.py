@@ -157,7 +157,7 @@ class AttackWPA(Attack):
                       output_file_prefix='wpa') as airodump:
 
             Color.clear_entire_line()
-            Color.pattack('WPA', self.target, 'Handshake capture', 'Waiting for target to appear...')
+            Color.pattack('WPA', self.target, 'Handshake', t('wpa.wait_target'))
             airodump_target = self.wait_for_target(airodump)
 
             self.clients = []
@@ -168,8 +168,9 @@ class AttackWPA(Attack):
                 essid = airodump_target.essid if airodump_target.essid_known else None
                 handshake = self.load_handshake(bssid=bssid, essid=essid)
                 if handshake:
-                    Color.pattack('WPA', self.target, 'Handshake capture', 'found {G}existing handshake{W} for {C}%s{W}' % handshake.essid)
-                    Color.pl('\n{+} Using handshake from {C}%s{W}' % handshake.capfile)
+                    Color.pattack('WPA', self.target, 'Handshake',
+                                  t('wpa.exist_hs', handshake.essid or bssid))
+                    Color.pl('\n{+} %s' % t('wpa.use_hs', handshake.capfile))
                     return handshake
 
             timeout_timer = Timer(Configuration.wpa_attack_timeout)
@@ -186,8 +187,8 @@ class AttackWPA(Attack):
                 Color.clear_entire_line()
                 Color.pattack('WPA',
                         airodump_target,
-                        'Handshake capture',
-                        'Listening. (clients:{G}%d{W}, deauth:{O}%s{W}, timeout:{R}%s{W})' % (len(self.clients), deauth_timer, timeout_timer))
+                        'Handshake',
+                        t('wpa.capturing', len(self.clients), deauth_timer, timeout_timer))
 
                 # 开局 / 周期 deauth（间隔已由调度器与捕获窗口联动）
                 if deauth_timer.ended():
@@ -213,25 +214,28 @@ class AttackWPA(Attack):
                     Color.clear_entire_line()
                     Color.pattack('WPA',
                             airodump_target,
-                            'Handshake capture',
-                            '{G}Captured handshake{W}')
+                            'Handshake',
+                            '{G}%s{W}' % t('wpa.captured'))
                     Color.pl('')
                     break
 
                 handshake = None
                 os.remove(temp_file)
 
-                # Look for new clients
+                # Look for new clients（过滤广播/组播噪声 MAC）
                 airodump_target = self.wait_for_target(airodump)
                 for client in airodump_target.clients:
-                    if client.station not in self.clients:
+                    sta = (client.station or '').upper()
+                    if not AttackWPA._is_usable_client(sta):
+                        continue
+                    if sta not in self.clients:
                         Color.clear_entire_line()
                         Color.pattack('WPA',
                                 airodump_target,
-                                'Handshake capture',
-                                'Discovered new client: {G}%s{W}' % client.station)
+                                'Handshake',
+                                t('wpa.new_client', '{G}%s{W}' % sta))
                         Color.pl('')
-                        self.clients.append(client.station)
+                        self.clients.append(sta)
 
                 time.sleep(step_timer.remaining())
                 continue
@@ -297,6 +301,25 @@ class AttackWPA(Attack):
         handshake.capfile = cap_filename
 
 
+    @staticmethod
+    def _is_usable_client(station):
+        '''过滤广播/组播/空地址，避免把 FF:FF:FF:FF:FF:FF 当客户端。'''
+        if not station:
+            return False
+        sta = station.strip().upper().replace('-', ':')
+        if len(sta) != 17:
+            return False
+        if sta in ('FF:FF:FF:FF:FF:FF', '00:00:00:00:00:00'):
+            return False
+        # 组播 MAC：首字节最低位为 1
+        try:
+            first = int(sta.split(':')[0], 16)
+            if first & 0x01:
+                return False
+        except ValueError:
+            return False
+        return True
+
     def deauth(self, target):
         '''
             Sends deauthentication request to broadcast and every client of target.
@@ -319,7 +342,7 @@ class AttackWPA(Attack):
             Color.clear_entire_line()
             Color.pattack('WPA',
                     target,
-                    'Handshake capture',
+                    'Handshake',
                     'Deauth {O}%s{W}' % target_name)
             send_deauth(
                 target.bssid,

@@ -1,3 +1,13 @@
+ck-wifikiller (2.5.16-1) unstable; urgency=medium
+
+  * Fix PMKID crash: Thread var shadowed i18n t() → TypeError not callable.
+  * Handshake analysis/aircrack progress fully i18n (no EN/CN mix).
+  * Soften aircrack "no handshake" when tshark/cowpatty already confirmed.
+  * Filter broadcast/multicast client MACs (e.g. FF:FF:FF:FF:FF:FF noise).
+  * Drop hidden/unnamed APs from scan+attack; disable useless hidden-SSID decloak.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 12:00:00 +0800
+
 ck-wifikiller (2.5.15-1) unstable; urgency=medium
 
   * Fix scan headers: CJK column widths (信道/客户 not truncated to 信/...).

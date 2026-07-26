@@ -68,8 +68,8 @@ class TestTempPathSafety(unittest.TestCase):
 
 
 class TestDeauthUsesStationMac(unittest.TestCase):
-    def test_decloak_deauth_targets_client_station(self):
-        '''隐藏 SSID deauth 必须打 station MAC，不能打 AP BSSID。'''
+    def test_decloak_deauth_disabled_by_default(self):
+        '''隐藏 SSID 揭名 deauth 默认关闭（无实用价值）。'''
         calls = []
 
         def fake_send_deauth(bssid, client_mac=None, essid=None, timeout=2):
@@ -96,11 +96,35 @@ class TestDeauthUsesStationMac(unittest.TestCase):
                 patch('ck_wifikiller.tools.airodump.time.time', return_value=1000):
             dump.deauth_hidden_targets()
 
-        self.assertGreaterEqual(len(calls), 2)
-        # 广播 + 客户端
-        clients = [c['client'] for c in calls if c['client']]
-        self.assertIn('11:22:33:44:55:66', clients)
-        self.assertNotIn(target.bssid, clients)
+        self.assertEqual(len(calls), 0)
+        self.assertFalse(dump.decloaking)
+
+    def test_filter_drops_hidden_essid(self):
+        '''扫描列表默认丢弃隐藏/无名称 AP。'''
+        named = SimpleNamespace(
+            bssid='AA:BB:CC:DD:EE:01',
+            essid='HomeWiFi',
+            essid_known=True,
+            encryption='WPA',
+            wps=0,
+            clients=[],
+        )
+        hidden = SimpleNamespace(
+            bssid='AA:BB:CC:DD:EE:02',
+            essid=None,
+            essid_known=False,
+            encryption='WPA',
+            wps=0,
+            clients=[],
+        )
+        with patch.object(Configuration, 'clients_only', False, create=True), \
+                patch.object(Configuration, 'encryption_filter', ['WEP', 'WPA', 'WPS'], create=True), \
+                patch.object(Configuration, 'ignore_essid', None, create=True), \
+                patch.object(Configuration, 'target_bssid', None, create=True), \
+                patch.object(Configuration, 'target_essid', None, create=True):
+            out = Airodump.filter_targets([named, hidden])
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0].bssid, named.bssid)
 
 
 class TestCrackResultRobustness(unittest.TestCase):

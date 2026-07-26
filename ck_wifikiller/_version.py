@@ -15,7 +15,7 @@ import os
 import subprocess
 
 # 兜底基线版本（无 git、无环境变量时使用）
-_BASE = '2.5.15-ck'
+_BASE = '2.5.16-ck'
 
 
 def _git_describe() -> str:

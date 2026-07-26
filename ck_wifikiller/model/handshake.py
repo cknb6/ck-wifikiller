@@ -3,6 +3,7 @@
 
 from ..util.process import Process
 from ..util.color import Color
+from ..util.i18n import t
 from ..tools.tshark import Tshark
 from ..tools.pyrit import Pyrit
 
@@ -140,16 +141,29 @@ class Handshake(object):
         '''Prints analysis of handshake capfile'''
         self.divine_bssid_and_essid()
 
+        confirmed = False  # 任一工具确认即视为可用
         if Tshark.exists():
-            Handshake.print_pairs(self.tshark_handshakes(),   self.capfile, 'tshark')
+            pairs = self.tshark_handshakes()
+            if pairs:
+                confirmed = True
+            Handshake.print_pairs(pairs, self.capfile, 'tshark')
 
         if Pyrit.exists():
-            Handshake.print_pairs(self.pyrit_handshakes(),    self.capfile, 'pyrit')
+            pairs = self.pyrit_handshakes()
+            if pairs:
+                confirmed = True
+            Handshake.print_pairs(pairs, self.capfile, 'pyrit')
 
         if Process.exists('cowpatty'):
-            Handshake.print_pairs(self.cowpatty_handshakes(), self.capfile, 'cowpatty')
+            pairs = self.cowpatty_handshakes()
+            if pairs:
+                confirmed = True
+            Handshake.print_pairs(pairs, self.capfile, 'cowpatty')
 
-        Handshake.print_pairs(self.aircrack_handshakes(), self.capfile, 'aircrack')
+        # aircrack 判定更严，其他工具已确认时降级为提示而非错误
+        Handshake.print_pairs(
+            self.aircrack_handshakes(), self.capfile, 'aircrack',
+            soft_fail=confirmed)
 
 
     def strip(self, outfile=None):
@@ -183,20 +197,25 @@ class Handshake(object):
 
 
     @staticmethod
-    def print_pairs(pairs, capfile, tool=None):
+    def print_pairs(pairs, capfile, tool=None, soft_fail=False):
         '''
             Prints out BSSID and/or ESSID given a list of tuples (bssid,essid)
+            soft_fail: 其他工具已确认时，失败用提示色而非错误色（aircrack 常误判）
         '''
         tool_str = ''
         if tool is not None:
             tool_str = '{C}%s{W}: ' % tool.rjust(8)
 
         if len(pairs) == 0:
-            Color.pl('{!} %s.cap file {R}does not{O} contain a valid handshake{W}' % (tool_str))
+            msg = t('wpa.hs_no', tool_str)
+            if soft_fail:
+                Color.pl('{!} {O}%s{W} {D}%s{W}' % (msg, t('wpa.hs_ok_note')))
+            else:
+                Color.pl('{!} {R}%s{W}' % msg)
             return
 
         for (bssid, essid) in pairs:
-            out_str = '{+} %s.cap file {G}contains a valid handshake{W} for' % tool_str
+            out_str = '{+} %s' % t('wpa.hs_ok', tool_str)
             if bssid and essid:
                 Color.pl('%s {G}%s{W} ({G}%s{W})' % (out_str, bssid, essid))
             elif bssid:
