@@ -117,6 +117,7 @@ class AttackPMKID(Attack):
         dump_thread.join(timeout=3)
 
         if pmkid_hash is None:
+            Color.clear_entire_line()
             Color.pattack('PMKID', self.target, 'CAPTURE',
                           '{R}%s{W}\n' % t('pmkid.fail'))
             Color.pl('{!} {O}%s{W}' % t('pmkid.hint'))

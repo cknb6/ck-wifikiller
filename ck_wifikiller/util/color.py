@@ -99,8 +99,12 @@ class Color(object):
         '''Prints an exception. Includes stack trace if necessary.'''
         Color.pl('\n{!} {R}Error: {O}%s' % str(exception))
 
-        # Don't dump trace for the "no targets found" case.
-        if 'No targets found' in str(exception):
+        # 已知运行期失败只打印消息，不 dump 全栈（目标未出现/airodump 退出等非代码 bug）
+        _msg = str(exception)
+        if ('No targets found' in _msg
+                or 'did not appear' in _msg
+                or 'exited (code' in _msg
+                or 'airodump-ng exited' in _msg):
             return
 
         from ..config import Configuration

@@ -232,8 +232,15 @@ def list_pmkid_files(hs_dir: str, bssid: str) -> list[str]:
             continue
         # 快速：文件名 BSSID 或内容含该 AP
         m = _PMKID_NAME.match(name)
-        if m and _norm_bssid(m.group('bssid')) != want:
-            continue
+        if m:
+            if _norm_bssid(m.group('bssid')) != want:
+                continue
+        else:
+            # 宽松回退：文件名必须含该 BSSID（无分隔符形式），
+            # 否则 bg_pmkid_<其它BSSID>.hc22000 会被误列给所有目标
+            name_norm = name.lower().replace(':', '').replace('-', '')
+            if want not in name_norm:
+                continue
         out.append(path)
     return out
 

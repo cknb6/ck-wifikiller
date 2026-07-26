@@ -1,3 +1,15 @@
+ck-wifikiller (2.5.23-1) unstable; urgency=medium
+
+  * PMKID: clear line before final fail msg (stray ')' from shorter
+    \r-overwrite of 'waiting PMKID (Ns)' line).
+  * pexception: suppress full stack trace for expected operational
+    errors (target did not appear / airodump-ng exited) — print msg only.
+  * capture_select: list_pmkid_files loose fallback now requires BSSID
+    in filename; stops bg_pmkid_<other_bssid>.hc22000 being listed for
+    every target (false "N captures but none valid").
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 10:00:00 +0800
+
 ck-wifikiller (2.5.22-1) unstable; urgency=medium
 
   * Hashcat backend auto: GPU if CUDA/OpenCL GPU present, else CPU
