@@ -42,17 +42,76 @@ class Hashcat(Dependency):
     MODE_WPA = '22000'
 
     @staticmethod
-    def should_use_force() -> bool:
-        command = ['hashcat', '-I']
+    def _devices_blob() -> str:
         try:
-            process = Process(command)
+            process = Process(['hashcat', '-I'])
             stdout, stderr = process.get_output()
-            stdout = stdout or ''
-            stderr = stderr or ''
-            blob = stderr + stdout
-            return 'No devices found/left' in blob or 'No devices found' in blob
+            return (stdout or '') + (stderr or '')
         except Exception:
-            return False
+            return ''
+
+    @staticmethod
+    def should_use_force() -> bool:
+        '''无稳定设备、或仅 CPU/虚拟机时建议 --force，避免 OpenCL 自检炸崩。'''
+        blob = Hashcat._devices_blob()
+        if not blob.strip():
+            return True
+        low = blob.lower()
+        if 'no devices found' in low or 'no devices found/left' in low:
+            return True
+        if 'cuda' not in low and 'hip' not in low:
+            if 'pocl' in low or 'cpu' in low or 'opencl' not in low:
+                return True
+        return False
+
+    @staticmethod
+    def detect_backend() -> dict:
+        """探测 Kali 上 hashcat 该用 GPU 还是 CPU。
+
+        返回:
+          mode: gpu | cpu
+          args: 建议附加参数（--force / -D 1）
+          label: 给人看的说明
+        """
+        blob = Hashcat._devices_blob()
+        low = blob.lower()
+        force = Hashcat.should_use_force()
+
+        has_cuda = 'cuda' in low and ('device' in low or '#' in blob)
+        has_hip = 'hip' in low
+        has_cl_gpu = (
+            'opencl' in low
+            and any(x in low for x in (
+                'gpu', 'geforce', 'radeon', 'nvidia', 'amd ', 'intel(r) arc',
+                'graphics',
+            ))
+            and 'pocl' not in low
+        )
+
+        args: list[str] = []
+        if force:
+            args.append('--force')
+
+        if has_cuda or has_hip or has_cl_gpu:
+            return {
+                'mode': 'gpu',
+                'args': args if args else [],
+                'label': 'GPU (CUDA/OpenCL)',
+            }
+
+        # 默认 CPU：虚拟机 / 无独显 / 仅 pocl
+        return {
+            'mode': 'cpu',
+            'args': ['--force', '-D', '1'],
+            'label': 'CPU (--force -D 1；无可用独显时用这个)',
+        }
+
+    @staticmethod
+    def backend_cli_prefix() -> list[str]:
+        try:
+            return list(Hashcat.detect_backend().get('args') or [])
+        except Exception:
+            return ['--force', '-D', '1']
 
     @staticmethod
     def _extract_key(stdout: str) -> str | None:
@@ -136,16 +195,19 @@ class Hashcat(Dependency):
                 '-m', Hashcat.MODE_WPA,
                 '--self-test-disable',
             ]
+            # GPU/CPU 后端（Kali 无独显时强制 CPU，避免 segfault）
+            for tok in Hashcat.backend_cli_prefix():
+                if tok not in command:
+                    command.append(tok)
             command.extend(attack_args[:2])  # -a 0|3
             if use_runtime:
                 command.extend(Hashcat._extra_attack_args(is_mask=is_mask))
             else:
                 # 快打：rules 可保留，但不套 path_deadline --runtime
                 extra = Hashcat._extra_attack_args(is_mask=is_mask)
-                # 去掉 --runtime N
                 cleaned: list[str] = []
                 skip_next = False
-                for i, tok in enumerate(extra):
+                for tok in extra:
                     if skip_next:
                         skip_next = False
                         continue
@@ -154,7 +216,8 @@ class Hashcat(Dependency):
                         continue
                     cleaned.append(tok)
                 command.extend(cleaned)
-            if Hashcat.should_use_force():
+            # backend 已含 --force 时不再重复
+            if Hashcat.should_use_force() and '--force' not in command:
                 command.append('--force')
             command.extend(additional_arg)
             command.extend(attack_args[2:])

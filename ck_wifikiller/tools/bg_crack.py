@@ -112,32 +112,39 @@ class BgCrack(object):
         return meta
 
     @classmethod
-    def _hashcat_cmd(cls, hash_file: str, wordlist: str) -> str:
-        parts = [
-            'hashcat', '--quiet', '-m', '22000', '--self-test-disable',
-            '-a', '0',
-        ]
+    def _abs(cls, path: str | None) -> str:
+        if not path:
+            return ''
+        return os.path.abspath(path)
+
+    @classmethod
+    def _hashcat_backend_info(cls) -> tuple[str, list[str]]:
+        '''返回 (label, args)。无 GPU 时强制 CPU，避免 Kali 虚拟机/OpenCL 段错误。'''
         try:
             from .hashcat import Hashcat
-            if Hashcat.should_use_force():
-                parts.append('--force')
+            info = Hashcat.detect_backend()
+            return str(info.get('label') or 'CPU'), list(info.get('args') or ['--force', '-D', '1'])
         except Exception:
-            parts.append('--force')
-        # 故意不设 --runtime：全量字典
+            return 'CPU (fallback)', ['--force', '-D', '1']
+
+    @classmethod
+    def _hashcat_cmd(cls, hash_file: str, wordlist: str) -> str:
+        # 仅 -a 0 HASH WL [ -r rules ]；quiet/mode/backend 由 bash run_hashcat 统一加
+        parts: list[str] = []
         rules = getattr(Configuration, 'hashcat_rules', None)
         if rules and os.path.isfile(rules):
-            parts.extend(['-r', rules])
-        parts.extend([hash_file, wordlist])
+            parts.extend(['-r', os.path.abspath(rules)])
+        parts.extend(['-a', '0', cls._abs(hash_file), cls._abs(wordlist)])
         return ' '.join(shlex.quote(p) for p in parts)
 
     @classmethod
     def _aircrack_cmd(cls, capfile: str, wordlist: str, bssid: str, key_file: str) -> str:
         parts = [
             'aircrack-ng', '-a', '2',
-            '-w', wordlist,
+            '-w', cls._abs(wordlist),
             '--bssid', bssid,
-            '-l', key_file,
-            capfile,
+            '-l', cls._abs(key_file),
+            cls._abs(capfile),
         ]
         return ' '.join(shlex.quote(p) for p in parts)
 
@@ -153,88 +160,113 @@ class BgCrack(object):
         key_file: str,
         cracked_file: str,
     ) -> str:
-        # 纯拼接，避免 bash ${} 与 str.format 花括号冲突
+        # 全部绝对路径，避免终端 cwd 不对
+        hash_file = cls._abs(hash_file) if hash_file else None
+        key_file = cls._abs(key_file)
+        cracked_file = cls._abs(cracked_file)
         pot = os.path.abspath(os.path.join(
             os.path.dirname(key_file) if key_file else '.', 'hashcat.wpa.pot'))
+        backend_label, backend_args = cls._hashcat_backend_info()
+        be = ' '.join(shlex.quote(a) for a in backend_args)
+        cpu_be = '--force -D 1'
+
         parts: list[str] = [
             '#!/usr/bin/env bash\n',
             'set +e\n',
+            'cd / || true\n',  # 不用相对路径
             'ESSID=%s\n' % shlex.quote(essid or ''),
             'BSSID=%s\n' % shlex.quote(bssid or ''),
             'KEY_FILE=%s\n' % shlex.quote(key_file),
             'CRACKED=%s\n' % shlex.quote(cracked_file),
             'POT=%s\n' % shlex.quote(pot),
+            'HASH=%s\n' % shlex.quote(hash_file or ''),
+            'HC_RC=0\n',
             'echo "[+] ck-wifikiller bg crack: %s"\n' % shlex.quote(title),
             'echo "[+] ESSID=$ESSID  BSSID=$BSSID"\n',
+            'echo "[+] hashcat backend prefer: %s"\n' % shlex.quote(backend_label),
             'echo "[+] full wordlist (no path slice / --runtime)"\n',
             'echo\n',
+            # 统一 runner：先推荐后端，段错误/设备错误再强制 CPU
+            'run_hashcat() {\n',
+            '  local rc=0\n',
+            '  echo "[*] try backend: %s"\n' % shlex.quote(backend_label),
+            '  # shellcheck disable=SC2086\n',
+            '  hashcat --potfile-path "$POT" --quiet -m 22000 --self-test-disable %s "$@"\n' % be,
+            '  rc=$?\n',
+            '  if [ $rc -eq 139 ] || [ $rc -gt 128 ] || [ $rc -eq 255 ]; then\n',
+            '    echo "[!] hashcat rc=$rc — fallback CPU (%s)"\n' % cpu_be,
+            '    hashcat --potfile-path "$POT" --quiet -m 22000 --self-test-disable %s "$@"\n' % cpu_be,
+            '    rc=$?\n',
+            '  fi\n',
+            '  HC_RC=$rc\n',
+            '  return $rc\n',
+            '}\n',
+            'show_key() {\n',
+            '  local show\n',
+            '  show=$(hashcat --quiet -m 22000 --show --potfile-path "$POT" --force "$HASH" 2>/dev/null | tail -n 1)\n',
+            '  if [ -n "$show" ]; then\n',
+            '    KEY=${show##*:}\n',
+            '    printf \'%s\\n\' "$KEY" > "$KEY_FILE"\n',
+            '    echo "[+] CRACKED: $KEY"\n',
+            '    printf \'%s\\t%s\\t%s\\thashcat\\n\' "$ESSID" "$BSSID" "$KEY" >> "$CRACKED"\n',
+            '    return 0\n',
+            '  fi\n',
+            '  return 1\n',
+            '}\n',
         ]
-        # hcxpsktool 快阶段（若可用）
+
         if hash_file:
             parts.append(
-                'if command -v hcxpsktool >/dev/null 2>&1 && command -v hashcat >/dev/null 2>&1; then\n'
+                'if [ -n "$HASH" ] && [ -f "$HASH" ] && command -v hcxpsktool >/dev/null 2>&1 '
+                '&& command -v hashcat >/dev/null 2>&1; then\n'
                 '  echo "[+] hcxpsktool weak candidates ..."\n'
                 '  CAND=$(mktemp)\n'
-                '  hcxpsktool -i %s > "$CAND" 2>/dev/null\n'
+                '  hcxpsktool -i "$HASH" > "$CAND" 2>/dev/null\n'
                 '  if [ -s "$CAND" ]; then\n'
-                '    hashcat --quiet -m 22000 --self-test-disable --force '
-                '--potfile-path "$POT" -a 0 %s "$CAND" 2>/dev/null\n'
-                '    SHOW=$(hashcat --quiet -m 22000 --show --potfile-path "$POT" %s 2>/dev/null | tail -n 1)\n'
-                '    if [ -n "$SHOW" ]; then KEY=${SHOW##*:}; printf \'%%s\\n\' "$KEY" > "$KEY_FILE"; '
-                'echo "[+] CRACKED: $KEY"; '
-                'printf \'%%s\\t%%s\\t%%s\\thcxpsk\\n\' "$ESSID" "$BSSID" "$KEY" >> "$CRACKED"; fi\n'
+                '    run_hashcat -a 0 "$HASH" "$CAND"\n'
+                '    show_key || true\n'
                 '  fi\n'
                 '  rm -f "$CAND"\n'
-                'fi\n' % (
-                    shlex.quote(hash_file),
-                    shlex.quote(hash_file),
-                    shlex.quote(hash_file),
-                )
+                'fi\n'
             )
-        if hashcat_line:
-            parts.append('if [ ! -s "$KEY_FILE" ] && command -v hashcat >/dev/null 2>&1; then\n')
-            parts.append('  echo "[+] hashcat -m 22000 full dict ..."\n')
-            hc = hashcat_line
-            if 'hashcat' in hc and '--potfile-path' not in hc:
-                hc = hc.replace(
-                    'hashcat ',
-                    'hashcat --potfile-path %s ' % shlex.quote(pot),
-                    1,
-                )
-            parts.append('  %s\n' % hc)
-            if hash_file:
-                parts.append(
-                    '  SHOW=$(hashcat --quiet -m 22000 --show --potfile-path "$POT" %s 2>/dev/null | tail -n 1)\n'
-                    % shlex.quote(hash_file)
-                )
-                parts.append(
-                    '  if [ -n "$SHOW" ]; then\n'
-                    '    KEY=${SHOW##*:}\n'
-                    '    printf \'%s\\n\' "$KEY" > "$KEY_FILE"\n'
-                    '    echo "[+] CRACKED: $KEY"\n'
-                    '    printf \'%s\\t%s\\t%s\\thashcat\\n\' "$ESSID" "$BSSID" "$KEY" >> "$CRACKED"\n'
-                    '  fi\n'
-                )
-            parts.append('fi\n')
+
+        if hashcat_line and hash_file:
+            # hashcat_line 已是 shell 安全的: [-r rules] -a 0 HASH WL
+            parts.append(
+                'if [ ! -s "$KEY_FILE" ] && command -v hashcat >/dev/null 2>&1 && [ -f "$HASH" ]; then\n'
+                '  echo "[+] hashcat -m 22000 full dict ..."\n'
+                '  # shellcheck disable=SC2086\n'
+                '  run_hashcat %s\n'
+                '  show_key || true\n'
+                '  if [ ! -s "$KEY_FILE" ] && { [ "$HC_RC" -eq 139 ] || [ "$HC_RC" -gt 128 ]; }; then\n'
+                '    echo "[!] hashcat crashed (rc=$HC_RC); will try aircrack if available"\n'
+                '  fi\n'
+                'fi\n' % hashcat_line
+            )
+
         if aircrack_line:
             parts.append(
                 'if [ ! -s "$KEY_FILE" ] && command -v aircrack-ng >/dev/null 2>&1; then\n'
-                '  echo "[+] aircrack-ng fallback ..."\n'
+                '  echo "[+] aircrack-ng CPU fallback ..."\n'
             )
             parts.append('  %s\n' % aircrack_line)
             parts.append(
                 '  if [ -s "$KEY_FILE" ]; then\n'
                 '    KEY=$(cat "$KEY_FILE")\n'
                 '    echo "[+] CRACKED: $KEY"\n'
-                '    printf \'%s\\t%s\\t%s\\taircrack\\n\' "$ESSID" "$BSSID" "$KEY" >> "$CRACKED"\n'
+                "    printf '%s\\t%s\\t%s\\taircrack\\n' \"$ESSID\" \"$BSSID\" \"$KEY\" >> \"$CRACKED\"\n"
                 '  fi\n'
                 'fi\n'
             )
+
         parts.append(
             'if [ -s "$KEY_FILE" ]; then\n'
             '  echo; echo "[+] done — key in $KEY_FILE"\n'
+            'elif [ "${HC_RC:-0}" -eq 139 ] || [ "${HC_RC:-0}" -gt 128 ]; then\n'
+            '  echo; echo "[!] hashcat crashed — install GPU driver OR use CPU: hashcat --force -D 1"\n'
+            '  echo "[!] not a dictionary miss; check OpenCL/CUDA (hashcat -I)"\n'
             'else\n'
-            '  echo; echo "[!] not in wordlist (full pass finished)"\n'
+            '  echo; echo "[!] not in wordlist (full pass finished, rc=${HC_RC:-?})"\n'
             'fi\n'
             'if [ -t 0 ] && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then\n'
             '  echo; read -r -p "Press Enter to close..." _\n'

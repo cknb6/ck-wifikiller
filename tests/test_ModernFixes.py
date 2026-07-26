@@ -205,11 +205,19 @@ class TestHashcatArguments(unittest.TestCase):
 
         with patch('ck_wifikiller.tools.hashcat.os.path.isfile', return_value=True), \
                 patch('ck_wifikiller.tools.hashcat.Process', FakeProcess), \
-                patch.object(Hashcat, 'should_use_force', return_value=False):
+                patch.object(Hashcat, 'should_use_force', return_value=False), \
+                patch.object(Hashcat, 'backend_cli_prefix', return_value=[]), \
+                patch.object(Hashcat, '_devices_blob', return_value='CUDA Device #1'):
             Hashcat.crack_hc22000('capture.hc22000')
 
-        dictionary_commands = [cmd for cmd in commands if cmd[cmd.index('-a') + 1] == '0']
-        mask_commands = [cmd for cmd in commands if cmd[cmd.index('-a') + 1] == '3']
+        def _has_mode(cmd, mode):
+            try:
+                return cmd[cmd.index('-a') + 1] == mode
+            except ValueError:
+                return False
+
+        dictionary_commands = [cmd for cmd in commands if _has_mode(cmd, '0')]
+        mask_commands = [cmd for cmd in commands if _has_mode(cmd, '3')]
         self.assertTrue(dictionary_commands)
         self.assertTrue(mask_commands)
         for command in dictionary_commands:

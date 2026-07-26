@@ -1,3 +1,11 @@
+ck-wifikiller (2.5.22-1) unstable; urgency=medium
+
+  * Hashcat backend auto: GPU if CUDA/OpenCL GPU present, else CPU
+    (--force -D 1). Bg crack retries CPU on segfault; aircrack fallback.
+  * Absolute paths in bg scripts; do not report dict-miss on crash.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 22:00:00 +0800
+
 ck-wifikiller (2.5.21-1) unstable; urgency=medium
 
   * Deauth: 4-round burst then 10s quiet listen for EAPOL.
