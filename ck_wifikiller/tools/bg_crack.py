@@ -154,6 +154,8 @@ class BgCrack(object):
         cracked_file: str,
     ) -> str:
         # 纯拼接，避免 bash ${} 与 str.format 花括号冲突
+        pot = os.path.abspath(os.path.join(
+            os.path.dirname(key_file) if key_file else '.', 'hashcat.wpa.pot'))
         parts: list[str] = [
             '#!/usr/bin/env bash\n',
             'set +e\n',
@@ -161,18 +163,48 @@ class BgCrack(object):
             'BSSID=%s\n' % shlex.quote(bssid or ''),
             'KEY_FILE=%s\n' % shlex.quote(key_file),
             'CRACKED=%s\n' % shlex.quote(cracked_file),
+            'POT=%s\n' % shlex.quote(pot),
             'echo "[+] ck-wifikiller bg crack: %s"\n' % shlex.quote(title),
             'echo "[+] ESSID=$ESSID  BSSID=$BSSID"\n',
             'echo "[+] full wordlist (no path slice / --runtime)"\n',
             'echo\n',
         ]
+        # hcxpsktool 快阶段（若可用）
+        if hash_file:
+            parts.append(
+                'if command -v hcxpsktool >/dev/null 2>&1 && command -v hashcat >/dev/null 2>&1; then\n'
+                '  echo "[+] hcxpsktool weak candidates ..."\n'
+                '  CAND=$(mktemp)\n'
+                '  hcxpsktool -i %s > "$CAND" 2>/dev/null\n'
+                '  if [ -s "$CAND" ]; then\n'
+                '    hashcat --quiet -m 22000 --self-test-disable --force '
+                '--potfile-path "$POT" -a 0 %s "$CAND" 2>/dev/null\n'
+                '    SHOW=$(hashcat --quiet -m 22000 --show --potfile-path "$POT" %s 2>/dev/null | tail -n 1)\n'
+                '    if [ -n "$SHOW" ]; then KEY=${SHOW##*:}; printf \'%%s\\n\' "$KEY" > "$KEY_FILE"; '
+                'echo "[+] CRACKED: $KEY"; '
+                'printf \'%%s\\t%%s\\t%%s\\thcxpsk\\n\' "$ESSID" "$BSSID" "$KEY" >> "$CRACKED"; fi\n'
+                '  fi\n'
+                '  rm -f "$CAND"\n'
+                'fi\n' % (
+                    shlex.quote(hash_file),
+                    shlex.quote(hash_file),
+                    shlex.quote(hash_file),
+                )
+            )
         if hashcat_line:
-            parts.append('if command -v hashcat >/dev/null 2>&1; then\n')
+            parts.append('if [ ! -s "$KEY_FILE" ] && command -v hashcat >/dev/null 2>&1; then\n')
             parts.append('  echo "[+] hashcat -m 22000 full dict ..."\n')
-            parts.append('  %s\n' % hashcat_line)
+            hc = hashcat_line
+            if 'hashcat' in hc and '--potfile-path' not in hc:
+                hc = hc.replace(
+                    'hashcat ',
+                    'hashcat --potfile-path %s ' % shlex.quote(pot),
+                    1,
+                )
+            parts.append('  %s\n' % hc)
             if hash_file:
                 parts.append(
-                    '  SHOW=$(hashcat --quiet -m 22000 --show %s 2>/dev/null | tail -n 1)\n'
+                    '  SHOW=$(hashcat --quiet -m 22000 --show --potfile-path "$POT" %s 2>/dev/null | tail -n 1)\n'
                     % shlex.quote(hash_file)
                 )
                 parts.append(

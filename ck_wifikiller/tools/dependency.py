@@ -38,6 +38,7 @@ class Dependency(object):
         from .tshark import Tshark
         from .macchanger import Macchanger
         from .hashcat import Hashcat, HcxDumpTool, HcxPcapTool
+        from .hcx_psk import HcxPskTool
         from .kismet import Kismet
         from .bettercap_wifi import BettercapWifi
 
@@ -47,11 +48,11 @@ class Dependency(object):
                 # wireless/net tools
                 Iwconfig, Ifconfig,
                 # WPS
-                Reaver, Bully,
+                Reaver, Bully, Wash,
                 # Cracking/handshakes — pyrit 已基本从 Kali 消失，降级为可选检测
                 Tshark,
-                # Hashcat + modern hcx (Kali 2024+)
-                Hashcat, HcxDumpTool, HcxPcapTool,
+                # Hashcat + modern hcx (Kali 2024–2026)
+                Hashcat, HcxDumpTool, HcxPcapTool, HcxPskTool,
                 # Layer-1 recon (optional)
                 Kismet, BettercapWifi,
                 # Misc

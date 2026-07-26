@@ -189,7 +189,8 @@ class AttackPMKID(Attack):
         Color.clear_entire_line()
         Color.pattack('PMKID', self.target, 'CRACK',
                       t('wpa.crack', 'hashcat -m 22000') + '\n')
-        key = Hashcat.crack_pmkid(pmkid_file)
+        key = Hashcat.crack_pmkid(
+            pmkid_file, essid=getattr(self.target, 'essid', None))
 
         if key is None and getattr(Configuration, 'cn_optimize', False):
             if not Hashcat.budget_exhausted():

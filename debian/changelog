@@ -1,3 +1,13 @@
+ck-wifikiller (2.5.20-1) unstable; urgency=medium
+
+  * Modernize all attack paths for Kali 2025–2026 toolchains.
+  * PMKID: ZerBea BPF + exitoneapol; crack via 22000 + hcxpsktool candidates.
+  * WPS: reaver -N/-K/--pixie-dust; skip PIN when locked; message fixes.
+  * WPA3 pure SAE: skip offline PMKID/handshake; bg crack potfile + psk stage.
+  * System: optional hcxpsktool/wash; keep aircrack-ng/scapy dual deauth.
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 20:00:00 +0800
+
 ck-wifikiller (2.5.19-1) unstable; urgency=medium
 
   * Handshake deauth cycle: burst x4 then quiet listen 4s (auto_attack style).

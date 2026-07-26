@@ -121,22 +121,95 @@ class Hashcat(Dependency):
         return extra
 
     @staticmethod
-    def crack_hc22000(hash_file: str, verbose: bool = False) -> str | None:
+    def _run_hc22000_phase(
+        hash_file: str,
+        attack_args: list[str],
+        is_mask: bool,
+        verbose: bool = False,
+        use_runtime: bool = True,
+    ) -> str | None:
+        '''执行单阶段 hashcat -m 22000（字典或掩码）。'''
+        for additional_arg in ([], ['--show']):
+            command = [
+                'hashcat',
+                '--quiet',
+                '-m', Hashcat.MODE_WPA,
+                '--self-test-disable',
+            ]
+            command.extend(attack_args[:2])  # -a 0|3
+            if use_runtime:
+                command.extend(Hashcat._extra_attack_args(is_mask=is_mask))
+            else:
+                # 快打：rules 可保留，但不套 path_deadline --runtime
+                extra = Hashcat._extra_attack_args(is_mask=is_mask)
+                # 去掉 --runtime N
+                cleaned: list[str] = []
+                skip_next = False
+                for i, tok in enumerate(extra):
+                    if skip_next:
+                        skip_next = False
+                        continue
+                    if tok == '--runtime':
+                        skip_next = True
+                        continue
+                    cleaned.append(tok)
+                command.extend(cleaned)
+            if Hashcat.should_use_force():
+                command.append('--force')
+            command.extend(additional_arg)
+            command.extend(attack_args[2:])
+            if verbose and not additional_arg:
+                Color.pl('{+} {D}Running: {W}{P}%s{W}' % ' '.join(command))
+            proc = Process(command)
+            proc.wait()
+            key = Hashcat._extract_key(proc.stdout() or '')
+            if key:
+                return key
+        return None
+
+    @staticmethod
+    def crack_hc22000(hash_file: str, verbose: bool = False,
+                      essid: str | None = None) -> str | None:
         """对 hashcat -m 22000 文件跑字典（握手+PMKID 通用）。
 
-        2026 增强：支持 rules 变换、掩码爆破(-a 3)、增量、透传参数。
+        阶段:
+          0) hcxpsktool 弱口令候选（Kali hcxtools，可选快打）
+          1) 用户字典 (-a 0) + rules
+          2) 掩码 (-a 3)（若提供）
         """
         if Configuration.wordlist is None and Configuration.hashcat_mask is None:
-            return None
+            # 仍允许仅 hcxpsktool
+            pass
         if not os.path.isfile(hash_file):
             return None
-        # 路径预算已尽：不再开字典
         if Hashcat.budget_exhausted():
             return None
 
-        mask = getattr(Configuration, 'hashcat_mask', None)
+        # 0) hcxpsktool 候选（不占用长 budget：无 --runtime）
+        try:
+            from .hcx_psk import HcxPskTool
+            if HcxPskTool.exists():
+                cand = HcxPskTool.generate_candidates_file(hash_file, essid=essid)
+                if cand:
+                    try:
+                        Color.pl('{+} {C}hcxpsktool{W} weak PSK candidates ...')
+                        key = Hashcat._run_hc22000_phase(
+                            hash_file, ['-a', '0', hash_file, cand],
+                            is_mask=False, verbose=verbose, use_runtime=False)
+                        if key:
+                            return key
+                    finally:
+                        try:
+                            os.remove(cand)
+                        except OSError:
+                            pass
+        except Exception:
+            pass
 
-        # 两阶段：先字典(-a 0)，再掩码(-a 3)（若提供 mask）
+        if Configuration.wordlist is None and Configuration.hashcat_mask is None:
+            return None
+
+        mask = getattr(Configuration, 'hashcat_mask', None)
         phases: list[tuple[list[str], bool]] = []
         if Configuration.wordlist is not None:
             phases.append((['-a', '0', hash_file, Configuration.wordlist], False))
@@ -144,28 +217,12 @@ class Hashcat(Dependency):
             phases.append((['-a', '3', hash_file, mask], True))
 
         for base, is_mask in phases:
-            for additional_arg in ([], ['--show']):
-                # 选项必须全部在位置参数（hash/wordlist/mask）之前，
-                # 避免 hashcat 把尾部 token 误当成额外字典。
-                command = [
-                    'hashcat',
-                    '--quiet',
-                    '-m', Hashcat.MODE_WPA,
-                    '--self-test-disable',
-                ]
-                command.extend(base[:2])  # -a 0|3
-                command.extend(Hashcat._extra_attack_args(is_mask=is_mask))
-                if Hashcat.should_use_force():
-                    command.append('--force')
-                command.extend(additional_arg)
-                command.extend(base[2:])  # hash_file + wordlist/mask
-                if verbose and not additional_arg:
-                    Color.pl('{+} {D}Running: {W}{P}%s{W}' % ' '.join(command))
-                proc = Process(command)
-                proc.wait()
-                key = Hashcat._extract_key(proc.stdout() or '')
-                if key:
-                    return key
+            if Hashcat.budget_exhausted():
+                break
+            key = Hashcat._run_hc22000_phase(
+                hash_file, base, is_mask=is_mask, verbose=verbose, use_runtime=True)
+            if key:
+                return key
         return None
 
     @staticmethod
@@ -202,7 +259,8 @@ class Hashcat(Dependency):
         hc_file = HcxPcapTool.generate_hc22000_file(
             handshake.capfile, show_command=show_command)
         try:
-            return Hashcat.crack_hc22000(hc_file, verbose=show_command)
+            essid = getattr(handshake, 'essid', None)
+            return Hashcat.crack_hc22000(hc_file, verbose=show_command, essid=essid)
         finally:
             if hc_file and os.path.exists(hc_file):
                 try:
@@ -211,7 +269,8 @@ class Hashcat(Dependency):
                     pass
 
     @staticmethod
-    def crack_pmkid(pmkid_file: str, verbose: bool = False) -> str | None:
+    def crack_pmkid(pmkid_file: str, verbose: bool = False,
+                    essid: str | None = None) -> str | None:
         """
         破解 PMKID/EAPOL 文本哈希。
         支持: *.hc22000 / *.22000 / 旧 *.16800（统一用 -m 22000 解析）。
@@ -223,7 +282,7 @@ class Hashcat(Dependency):
         if path.endswith('.16800'):
             Color.pl('{!} {O}检测到废弃的 .16800 格式，统一用 -m 22000 解析；'
                      '若失败请用 hcxpcapngtool 从原始 pcapng 重新生成 .hc22000{W}')
-        return Hashcat.crack_hc22000(path, verbose=verbose)
+        return Hashcat.crack_hc22000(path, verbose=verbose, essid=essid)
 
 
 class HcxDumpTool(Dependency):

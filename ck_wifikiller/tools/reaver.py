@@ -11,7 +11,9 @@ from ..util.color import Color
 from ..util.process import Process
 from ..util.timer import Timer
 
-import os, time, re
+import os
+import re
+import time
 
 class Reaver(Attack, Dependency):
     dependency_required = False
@@ -40,24 +42,48 @@ class Reaver(Attack, Dependency):
 
         self.output_write = open(self.output_filename, 'a')
 
+        # 探测 reaver 帮助，兼容 Kali 新旧参数
+        help_out = ''
+        try:
+            help_out = (Process(['reaver', '-h']).stdout() or '') + (
+                Process(['reaver', '-h']).stderr() or '')
+        except Exception:
+            pass
+
+        # 优先短参数（跨版本更稳）
         self.reaver_cmd = [
             'reaver',
-            '--interface',  Configuration.interface,
-            '--bssid',      self.target.bssid,
-            '--channel',    self.target.channel,
-            '-vv'
+            '-i', Configuration.interface,
+            '-b', self.target.bssid,
+            '-c', str(self.target.channel),
+            '-vv',
         ]
+        # 跳过超时 NACK 等待，加快 Pixie/PIN（多数 fork 支持 -N）
+        if re.search(r'(^|\s)-N\b|--no-nacks', help_out):
+            self.reaver_cmd.append('-N')
 
         if pixie_dust:
-            self.reaver_cmd.extend(['--pixie-dust', '1'])
+            # 现代: --pixie-dust 1；旧 fork: -K 1
+            if '--pixie-dust' in help_out:
+                self.reaver_cmd.extend(['--pixie-dust', '1'])
+            elif re.search(r'(^|\s)-K\b', help_out) or 'pixie' in help_out.lower():
+                self.reaver_cmd.extend(['-K', '1'])
+            else:
+                self.reaver_cmd.extend(['--pixie-dust', '1'])
 
         self.reaver_proc = None
 
     @staticmethod
     def is_pixiedust_supported():
         ''' Checks if 'reaver' supports WPS Pixie-Dust attack '''
-        output = Process(['reaver', '-h']).stderr()
-        return '--pixie-dust' in output
+        try:
+            output = (Process(['reaver', '-h']).stdout() or '') + (
+                Process(['reaver', '-h']).stderr() or '')
+        except Exception:
+            return False
+        return ('--pixie-dust' in output
+                or re.search(r'(^|\s)-K\b', output) is not None
+                or 'pixie' in output.lower())
 
     def run(self):
         ''' Returns True if attack is successful. '''

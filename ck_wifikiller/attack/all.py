@@ -309,10 +309,23 @@ class AttackAll(object):
             if not Configuration.use_pmkid_only:
                 named['handshake'] = AttackWPA(target)
 
-        # 明确无 WPS 时去掉 WPS 向量（空转浪费 15s+）
+        # 明确无 WPS 时去掉 WPS 向量（空转浪费切片）
         if target.wps == WPSState.NONE and not Configuration.wps_only:
             named.pop('wps_pixie', None)
             named.pop('wps_pin', None)
+        # LOCKED：保留 Pixie，去掉 PIN（除非 --ignore-locks）
+        if (target.wps == WPSState.LOCKED
+                and not Configuration.wps_ignore_lock
+                and not Configuration.wps_only):
+            named.pop('wps_pin', None)
+
+        # 纯 WPA3-SAE：离线 22000 不可行，去掉 PMKID/握手（Transition 仍可打）
+        try:
+            if target.is_wpa3_sae() and not target.is_wpa3_transition():
+                named.pop('pmkid', None)
+                named.pop('handshake', None)
+        except Exception:
+            pass
 
         order = []
         try:

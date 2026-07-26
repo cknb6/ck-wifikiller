@@ -33,39 +33,45 @@ class AttackWPS(Attack):
             return False
 
         if not Configuration.wps_pixie and self.pixie_dust:
-            Color.pl('\r{!} {O}--no-pixie{R} was given, ignoring WPS PIN Attack on ' +
+            Color.pl('\r{!} {O}--no-pixie{R} was given, skipping WPS Pixie-Dust on ' +
                     '{O}%s{W}' % self.target.essid)
             self.success = False
             return False
 
         if not Configuration.wps_pin and not self.pixie_dust:
-            Color.pl('\r{!} {O}--no-pin{R} was given, ignoring WPS Pixie-Dust Attack ' +
-                    'on {O}%s{W}' % self.target.essid)
+            Color.pl('\r{!} {O}--no-pin{R} was given, skipping WPS PIN on ' +
+                    '{O}%s{W}' % self.target.essid)
             self.success = False
             return False
 
+        # LOCKED：PIN 在线几乎必失败；Pixie 仍可试（不依赖在线 PIN 穷举）
+        from ..model.target import WPSState
+        if (not self.pixie_dust
+                and getattr(self.target, 'wps', None) == WPSState.LOCKED
+                and not Configuration.wps_ignore_lock):
+            Color.pl('\r{!} {O}WPS locked, skip PIN (use --ignore-locks or Pixie){W}')
+            self.success = False
+            return False
+
+        # 工具选择：reaver 优先（Kali 默认），缺则 bully；Pixie 能力不足时换 bully
+        if Configuration.use_bully and Bully.exists():
+            return self.run_bully()
         if not Reaver.exists() and Bully.exists():
-            # Use bully if reaver isn't available
             return self.run_bully()
-        elif self.pixie_dust and not Reaver.is_pixiedust_supported() and Bully.exists():
-            # Use bully if reaver can't do pixie-dust
-            return self.run_bully()
-        elif Configuration.use_bully:
-            # Use bully if asked by user
-            return self.run_bully()
-        elif not Reaver.exists():
-            # Print error if reaver isn't found (bully not available)
-            if self.pixie_dust:
-                Color.pl('\r{!} {R}Skipping WPS Pixie-Dust attack: {O}reaver{R} not found.{W}')
-            else:
-                Color.pl('\r{!} {R}Skipping WPS PIN attack: {O}reaver{R} not found.{W}')
+        if self.pixie_dust and Reaver.exists() and not Reaver.is_pixiedust_supported():
+            if Bully.exists():
+                return self.run_bully()
+            Color.pl('\r{!} {R}Skipping WPS Pixie: reaver has no pixie support, bully missing{W}')
             return False
-        elif self.pixie_dust and not Reaver.is_pixiedust_supported():
-            # Print error if reaver can't support pixie-dust (bully not available)
-            Color.pl('\r{!} {R}Skipping WPS attack: {O}reaver{R} does not support {O}--pixie-dust{W}')
-            return False
-        else:
+        if Reaver.exists():
             return self.run_reaver()
+        if Bully.exists():
+            return self.run_bully()
+        if self.pixie_dust:
+            Color.pl('\r{!} {R}Skipping WPS Pixie-Dust: need reaver or bully{W}')
+        else:
+            Color.pl('\r{!} {R}Skipping WPS PIN: need reaver or bully{W}')
+        return False
 
 
     def run_bully(self):
