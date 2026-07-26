@@ -279,7 +279,9 @@ class HcxDumpTool(Dependency):
                     command.append(f'--bpf={bpf_path}')
                 else:
                     command.extend(['--bpf', bpf_path])
-                # bitmask 7 = PMKID|M1M2|M1M2M3；仅在 BPF 成功时启用（官方推荐）
+                # exitoneapol bitmask（ZerBea changelog / discussion）:
+                #   1=PMKID  2=M2M3授权  4=M1M2挑战  → 7=任一可爆破材料即停
+                # 仅在 BPF 成功时启用（官方：建议配合 target BPF）
                 if '--exitoneapol' in help_out:
                     command.extend(['--exitoneapol', '7'])
             # 旧版兼容探测
@@ -306,23 +308,30 @@ class HcxDumpTool(Dependency):
 
     @staticmethod
     def _build_bpf(bpf_path: str, bssid_colon: str) -> bool:
-        """构建单目标 BPF（ZerBea / hcxdumptool 官方实践）。
+        """构建单目标 BPF（ZerBea hcxdumptool docs/example.md 2026）。
 
-        优先保留 undirected PROBEREQUEST（广播 addr3），否则 hcxpcapngtool
-        会警告缺帧、client-less 关联攻击变差：
-          wlan addr3 <BSSID> or wlan addr3 ff:ff:ff:ff:ff:ff
-        备选：目标 AP + 全部 probe-req（含 directed）。
+        官方推荐（attack 单目标）:
+          wlan addr1 <AP> or wlan addr2 <AP> or wlan addr3 <AP>
+          or type mgt subtype probereq
+        不得过滤掉 undirected PROBEREQUEST（可含弱口令线索，且 client-less 关联需要）。
         编译：hcxdumptool --bpfc= 优先，失败 tcpdump -ddd。
         """
         # 规范 MAC（允许带冒号）
         bssid_colon = bssid_colon.strip().lower()
+        # 无冒号形式（部分 bpfc/工具更稳）
+        bssid_hex = bssid_colon.replace(':', '')
         exprs = [
-            # 经典：AP + 广播（undirected probe）
+            # ZerBea example.md 2026 官方 attack BPF
+            (f'wlan addr1 {bssid_colon} or wlan addr2 {bssid_colon} '
+             f'or wlan addr3 {bssid_colon} or type mgt subtype probereq'),
+            # 同上 + 显式保留广播 undirected probe
+            (f'wlan addr1 {bssid_colon} or wlan addr2 {bssid_colon} '
+             f'or wlan addr3 {bssid_colon} or wlan addr3 ff:ff:ff:ff:ff:ff'),
+            # 旧写法兼容
             f'wlan addr3 {bssid_colon} or wlan addr3 ff:ff:ff:ff:ff:ff',
-            # 备选：AP + 全部 probe-req（ZerBea discussion #494）
             f'wlan addr3 {bssid_colon} or (wlan type mgt and subtype probe-req)',
-            # 最严：仅 AP
             f'wlan addr3 {bssid_colon}',
+            f'wlan addr3 {bssid_hex}',
         ]
         for expr in exprs:
             # 内置编译器
