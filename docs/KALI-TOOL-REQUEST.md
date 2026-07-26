@@ -1,5 +1,10 @@
 # Kali Linux — New Tool Request (draft for bugs.kali.org)
 
+**Submitted:** https://bugs.kali.org/view.php?id=9799  
+**Reporter:** chuankangkk (cknb)  
+**Category:** New Tool Requests  
+**Status:** open / new  
+
 Use this text when filing: https://bugs.kali.org/
 
 **Category:** New Tool Requests  
