@@ -1,3 +1,10 @@
+ck-wifikiller (2.5.14-1) unstable; urgency=medium
+
+  * Scan: keep splash fixed; only refresh table region (UP to header + erase down).
+  * Never full-clear each second (no stacked tables covering watermark/banner).
+
+ -- 传康Kk <1837620622@qq.com>  Mon, 27 Jul 2026 00:30:00 +0800
+
 ck-wifikiller (2.5.13-1) unstable; urgency=medium
 
   * Scan: restore wifite in-place table refresh (single table, correct UP lines).

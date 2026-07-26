@@ -2,13 +2,16 @@
 # -*- coding: utf-8 -*-
 """扫描 AP 并选择目标。
 
-表格刷新采用 wifite 经典「光标上移就地覆盖」：
-  始终只有一张表 + 底部一行状态，每秒原地刷新。
-关键修正:
-  1) 上移行数 = header+sep+N 目标 + 状态行 = N+3（从状态行回到表头需 N+2）
-  2) 上移必须用 Color.p，禁止 Color.pl（pl 会多换一行导致错位）
-  3) 行数变少或装不下时才 clear
-  4) Ctrl+C：可中断短 sleep；airodump 独立进程组，SIGINT 只打断 Python
+刷新逻辑（对齐 wifite 经典体验 + 修正行数）:
+  - 上方 splash / banner **永远不动**
+  - 其下 **只有一张表** + 底部状态行，每秒原地覆盖刷新
+  - 算法：光标上移到表头 → \\033[J 清表区到底 → 重画表 → 状态行
+  - 绝不用每秒 clear 整屏（会闪、且在部分终端叠表）
+  - 绝不多上移（会盖住 splash）
+
+Ctrl+C：
+  - airodump 独立进程组，SIGINT 只到 Python
+  - sleep 按 0.2s 分段，一次 Ctrl+C 结束扫描进入选目标
 """
 
 from __future__ import annotations
@@ -19,19 +22,20 @@ from time import sleep, time
 from ..util.color import Color
 from ..tools.airodump import Airodump
 from ..util.input import raw_input, xrange
-from ..model.target import Target, WPSState
+from ..model.target import WPSState
 from ..config import Configuration
 
 
 class Scanner(object):
     ''' Scans wifi networks & provides menu for selecting targets '''
 
-    # 光标上移一行（CSI A）；wifite 用 \x1B[1F，两者在常见终端等价
+    # CSI CUU — 上移一行（与 kimocoder wifite2 一致用 1A）
     UP_CHAR = '\033[A'
 
     def __init__(self):
         self.previous_target_count = 0
-        self._printed_rows = 0  # 上一帧表格占用行数（含 header/sep/targets，不含 status）
+        # 上一帧「表体」行数 = 2(header+sep) + N，不含状态行
+        self._table_rows = 0
         self._has_status = False
         self.targets = []
         self.target = None
@@ -44,7 +48,6 @@ class Scanner(object):
 
                 while True:
                     if airodump.pid.poll() is not None:
-                        # 子进程异常退出：尽量保留已扫到的目标
                         if not self.targets:
                             self.err_msg = Color.s(
                                 '{!} {O}airodump-ng exited unexpectedly{W}')
@@ -65,18 +68,15 @@ class Scanner(object):
                     if max_scan_time > 0 and time() > scan_start_time + max_scan_time:
                         break
 
-                    # 可中断 sleep：最多等 0.2s 就能响应 Ctrl+C
                     self._interruptible_sleep(1.0)
 
         except KeyboardInterrupt:
-            # 一次 Ctrl+C：结束扫描，进入选目标（不要再 clear 整屏叠表）
-            Color.pl('')
-            self._has_status = False
-            # 保留 previous 行数，选目标前会 force 干净重画一次
+            # 一次 Ctrl+C：光标仍在状态行，select_targets 会就地盖成选表
+            # 不要在这里 Color.pl（会多换行导致上移算错、盖到 splash）
+            pass
 
     @staticmethod
     def _interruptible_sleep(seconds: float) -> None:
-        '''分段 sleep，便于尽快收到 KeyboardInterrupt。'''
         end = time() + max(0.0, seconds)
         while True:
             left = end - time()
@@ -107,14 +107,40 @@ class Scanner(object):
             return True
         return False
 
-    def _cursor_up(self, n: int) -> None:
-        '''上移 n 行，禁止 pl（否则会多输出换行把布局打乱）。'''
-        if n <= 0:
-            return
-        Color.p(self.UP_CHAR * n)
+    def _move_to_table_top(self) -> None:
+        '''光标从当前位置回到表头行首；不动 splash。
 
-    def print_targets(self, force_full=False):
-        '''打印/刷新目标表。force_full=True 时不依赖上移，直接在当前位置画新表。'''
+        布局（表头为第 0 行）:
+          0 header
+          1 sep
+          2..N+1 targets (N 行)
+          N+2 status   ← 扫描时无换行停在此行
+        从 status 回到 header 需上移 (N+2) = table_rows 次
+        （table_rows = 2+N；从 status 上移 2+N 次刚好到 header）
+        若已换行离开 status，则上移 table_rows 次。
+        '''
+        if self._table_rows <= 0:
+            return
+        # 有状态行且光标在状态行上：上移行数 = table_rows
+        # （status 在 table 下方第 1 行，从 status 到 header = table_rows 行）
+        # 例 N=1: rows=3 (h,sep,t1), status 第4行，UP 3 到 header ✓
+        ups = self._table_rows
+        if self._has_status:
+            # 光标在 status：再多 0？ table_rows 行内容之上就是 header
+            # h,sep,t1,...,tN = table_rows 行，status 在下一行
+            # 从 status UP table_rows → header. 正确。
+            pass
+        Color.p(self.UP_CHAR * ups)
+        # 从光标清到屏底：只清表区及以下，上方 splash 不动
+        Color.p('\033[J')
+        self._has_status = False
+        self._table_rows = 0
+
+    def print_targets(self, for_select=False):
+        '''打印/刷新目标表（始终一张）。
+
+        for_select: 选目标前调用，先离开状态行再就地覆盖。
+        '''
         if len(self.targets) == 0:
             Color.p('\r')
             return
@@ -123,30 +149,26 @@ class Scanner(object):
         from .term_layout import pad, term_cols
 
         n = len(self.targets)
-        # 表格本体行数：header + sep + n 行目标
-        table_rows = 2 + n
+        table_rows = 2 + n  # header + sep + targets
         term_h = Scanner.get_terminal_height()
 
-        if not force_full and self._printed_rows > 0 and Configuration.verbose <= 1:
-            # 从「状态行」回到表头：状态 1 行 + 上一帧 table_rows
-            # 光标当前在状态行末尾（无换行）
-            lines_up = self._printed_rows + (1 if self._has_status else 0)
-            # 目标变少或终端装不下 → clear 后整表重画
-            if (self.previous_target_count > n
-                    or term_h < table_rows + 3
-                    or lines_up >= term_h):
+        if self._table_rows > 0 and Configuration.verbose <= 1:
+            # 终端太矮或表太大：无法安全上移时，仅 clear 表以下——
+            # 用全屏 clear 会抹掉 splash，仅在装不下时使用
+            need_full_clear = (
+                table_rows + 2 >= term_h
+                or self._table_rows + 2 >= term_h
+            )
+            if need_full_clear:
                 from ..util.process import Process
                 Process.call(['clear'])
-                self._printed_rows = 0
+                self._table_rows = 0
                 self._has_status = False
             else:
-                self._cursor_up(lines_up)
-                # 从光标清到屏底，去掉残留
-                Color.p('\033[J')
-                self._has_status = False
+                self._move_to_table_top()
 
         self.previous_target_count = n
-        self._printed_rows = table_rows
+        self._table_rows = table_rows
 
         cols = term_cols()
         fixed = 4 + 2 + 3 + 2 + 4 + 2 + 5 + 2 + 4 + 2 + 4 + 2
@@ -154,7 +176,6 @@ class Scanner(object):
             fixed += 17 + 2
         essid_width = max(12, min(36, cols - fixed - 2))
 
-        # 表头
         Color.clear_entire_line()
         Color.p('{W}{D}')
         header = '%s  %s' % (
@@ -195,7 +216,7 @@ class Scanner(object):
             sum(len(t.clients) for t in self.targets),
         )
         Color.clear_entire_line()
-        Color.p(outline)
+        Color.p(outline)  # 不换行，下一帧从这行上移回表头
         self._has_status = True
 
     @staticmethod
@@ -223,16 +244,15 @@ class Scanner(object):
         if Configuration.scan_time > 0 or getattr(Configuration, 'auto_attack', False):
             return self.targets
 
-        # 选目标：换行后就地画一张干净表（不再 clear 整屏，避免闪屏）
-        if self._has_status:
-            Color.pl('')  # 结束状态行
-            self._has_status = False
-        # 从上移覆盖扫描表位置重画
-        if self._printed_rows > 0 and Configuration.verbose <= 1:
-            self._cursor_up(self._printed_rows)
+        # 选目标：光标多半还在状态行 → 上移 table_rows 到表头，清表区，重画
+        # （不动 splash；不要先 pl 换行）
+        if self._table_rows > 0 and Configuration.verbose <= 1:
+            ups = self._table_rows  # 从 status 到 header 正好 table_rows
+            Color.p(self.UP_CHAR * ups)
             Color.p('\033[J')
-            self._printed_rows = 0
-        self.print_targets(force_full=True)
+            self._table_rows = 0
+            self._has_status = False
+        self.print_targets()
 
         if self.err_msg is not None:
             Color.pl(self.err_msg)
