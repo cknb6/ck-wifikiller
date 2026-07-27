@@ -217,6 +217,12 @@ class Reaver(Attack, Dependency):
                 # Pixie-Dust 破出 PIN 后 reaver 通常不给 PSK（1.6.x）。
                 # 自动进行下一步：先用 reaver -p <pin> 在线取 PSK，再回退 bully。
                 # 捕获所有异常，避免 bully 未装/卡死导致整个 WPS 攻击崩溃。
+                # 先停主 reaver 进程释放网卡，避免 reaver -p 与主进程抢同一网卡。
+                try:
+                    if self.reaver_proc is not None and self.reaver_proc.poll() is None:
+                        self.reaver_proc.interrupt()
+                except Exception:
+                    pass
                 self.pattack('{W}Retrieving PSK via {C}reaver -p{W}/{C}bully{W}...')
                 psk = None
                 try:

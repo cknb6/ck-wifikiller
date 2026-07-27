@@ -1,3 +1,13 @@
+ck-wifikiller (2.5.27-1) unstable; urgency=medium
+
+  * WPS: stop the main reaver process before running `reaver -p <pin>`
+    to retrieve the PSK. Previously both reaver instances could contend
+    for the same monitor NIC. The main pixie-dust reaver is interrupted
+    first to release the interface, then the PIN-based PSK retrieval
+    runs cleanly.
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 18:00:00 +0800
+
 ck-wifikiller (2.5.26-1) unstable; urgency=medium
 
   * WPS: auto-retrieve PSK after PIN cracked. Pixie-Dust cracks the
