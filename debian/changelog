@@ -1,3 +1,20 @@
+ck-wifikiller (2.5.26-1) unstable; urgency=medium
+
+  * WPS: auto-retrieve PSK after PIN cracked. Pixie-Dust cracks the
+    PIN but reaver 1.6.x does not return the WPA PSK, so the attack
+    stalled with only the PIN. Now Reaver.get_psk_from_pin runs
+    `reaver -p <pin>` first (reaver is already installed), then falls
+    back to bully (original wifite2 path). Both paths have a wall-clock
+    timeout (45s) so a stuck tool no longer blocks the main flow.
+  * Reaver.parse_crack_result: catch all exceptions (not just
+    KeyboardInterrupt) so a missing bully / stuck process no longer
+    crashes the whole WPS attack. CrackResultWPS saved with psk=None
+    if retrieval fails (PIN still preserved).
+  * Bully.get_psk_from_pin: add timeout + check both stdout and stderr
+    for the KEY line (version-dependent).
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 16:00:00 +0800
+
 ck-wifikiller (2.5.25-1) unstable; urgency=medium
 
   * deauth: maximize packet volume to ensure clients are kicked.

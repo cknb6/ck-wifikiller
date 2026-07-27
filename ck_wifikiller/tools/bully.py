@@ -370,7 +370,7 @@ class Bully(Attack, Dependency):
 
 
     @staticmethod
-    def get_psk_from_pin(target, pin):
+    def get_psk_from_pin(target, pin, timeout=45):
         # Fetches PSK from a Target assuming 'pin' is the correct PIN
         '''
         bully --channel 1 --bssid 34:21:09:01:92:7C --pin 01030365 --bruteforce wlan0mon
@@ -390,12 +390,23 @@ class Bully(Attack, Dependency):
         ]
 
         bully_proc = Process(cmd)
+        # 墙钟超时：bully 拿到 KEY 会自行退出，否则中断，避免卡死主流程
+        start = time.time()
+        while bully_proc.poll() is None:
+            if time.time() - start >= timeout:
+                bully_proc.interrupt()
+                break
+            time.sleep(0.3)
 
-        for line in bully_proc.stderr().split('\n'):
-            key_re = re.search(r"^\s*KEY\s*:\s*'(.*)'\s*$", line)
-            if key_re is not None:
-                psk = key_re.group(1)
-                return psk
+        # bully 的 KEY 行可能在 stdout 或 stderr（版本差异），两路都查
+        for stream in (bully_proc.stdout(), bully_proc.stderr()):
+            if not stream:
+                continue
+            for line in stream.split('\n'):
+                key_re = re.search(r"^\s*KEY\s*:\s*'(.*)'\s*$", line)
+                if key_re is not None:
+                    psk = key_re.group(1)
+                    return psk
 
         return None
 

