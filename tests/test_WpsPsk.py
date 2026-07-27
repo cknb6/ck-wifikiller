@@ -26,6 +26,11 @@ class TestExtractPsk(unittest.TestCase):
         out = "[+] WPA PSK: 'password123'"
         self.assertEqual(Reaver._extract_psk(out), 'password123')
 
+    def test_reaver_wpa_psk_no_quotes(self):
+        # 部分 reaver fork 不带引号
+        out = "[+] WPA PSK: Test123"
+        self.assertEqual(Reaver._extract_psk(out), 'Test123')
+
     def test_bully_key(self):
         out = "  KEY   : 'mywifikey'\n  PIN   : '12345670'"
         self.assertEqual(Reaver._extract_psk(out), 'mywifikey')

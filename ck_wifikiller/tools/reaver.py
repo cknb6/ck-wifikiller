@@ -455,10 +455,14 @@ class Reaver(Attack, Dependency):
         '''从 reaver/bully 输出提取 WPA PSK。'''
         if not stdout:
             return None
-        # [+] WPA PSK: 'password'
+        # [+] WPA PSK: 'password'（带引号，wifite2/原版 reaver 常见）
         m = re.search(r"WPA PSK:\s*'(.+?)'", stdout)
         if m:
             return m.group(1)
+        # [+] WPA PSK: password（无引号，部分 fork）
+        m = re.search(r"WPA PSK:\s*(\S.+?)\s*$", stdout, re.MULTILINE)
+        if m:
+            return m.group(1).strip()
         # bully: KEY: 'password'
         m = re.search(r"^\s*KEY\s*:\s*'(.*)'\s*$", stdout, re.MULTILINE)
         if m:

@@ -132,12 +132,13 @@ def send_deauth(
             )
         if n > 0:
             try:
+                # 64 包 deauth 需 ≥5s 才能发完，避免被超时中断
                 Aireplay.deauth(
                     target_bssid,
                     essid=essid,
                     client_mac=client_mac,
                     num_deauths=n,
-                    timeout=max(timeout, 3.0),
+                    timeout=max(timeout, 5.0),
                 )
                 result['aireplay'] = True
             except Exception:

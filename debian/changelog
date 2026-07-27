@@ -1,3 +1,12 @@
+ck-wifikiller (2.5.28-1) unstable; urgency=medium
+
+  * WPS: _extract_psk now also matches unquoted `WPA PSK: password`
+    output (some reaver forks do not quote the PSK).
+  * deauth: raise aireplay backup timeout 3s -> 5s so 64-frame
+    deauth volleys finish before the wall-clock interrupt.
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 20:30:00 +0800
+
 ck-wifikiller (2.5.27-1) unstable; urgency=medium
 
   * WPS: stop the main reaver process before running `reaver -p <pin>`
