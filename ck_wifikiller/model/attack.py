@@ -8,7 +8,8 @@ class Attack(object):
     '''Contains functionality common to all attacks.'''
 
     # 初始等待 AP 出现的默认上限（秒）；实际还会被 path_deadline / 路径切片收紧
-    target_wait = 20
+    # 旧值 20s 对弱信号/信道切换太短，提到 45s 与 wpa_attack_timeout 下限一致
+    target_wait = 45
     # 攻击循环中刷新目标信息时的短超时（秒）——禁止再次卡 20~60s
     target_refresh_wait = 3
 

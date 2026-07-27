@@ -110,10 +110,10 @@ class TestScapyDeauth(unittest.TestCase):
                 'AA:BB:CC:DD:EE:FF',
                 client_mac='11:22:33:44:55:66',
             )
-        # 4 轮 × 64 帧
-        self.assertEqual(n, 256)
+        # 默认精准每向 64 → 4 向 × 64 = 256 帧/轮；4 轮 → 1024 帧
+        self.assertEqual(n, 1024)
         self.assertEqual(len(sent), 4)
-        self.assertTrue(all(s['n'] == 64 and s['inter'] == 0.003 for s in sent))
+        self.assertTrue(all(s['n'] == 256 and s['inter'] == 0.003 for s in sent))
 
 
 class TestDeauthEngine(unittest.TestCase):
@@ -144,11 +144,10 @@ class TestDeauthEngine(unittest.TestCase):
         self.assertTrue(r['aireplay'])
         sc.assert_called_once()
         ar.assert_called_once()
-        # Scapy 成功后 aireplay 补刀：4~16 包（按网卡 profile）
+        # Scapy 成功后 aireplay 补刀：按 profile.aireplay_count 满包数
         n = ar.call_args.kwargs.get('num_deauths')
         if n is not None:
-            self.assertGreaterEqual(n, 4)
-            self.assertLessEqual(n, 16)
+            self.assertEqual(n, 16)
 
     def test_aireplay_only(self):
         Configuration.deauth_engine = 'aireplay'

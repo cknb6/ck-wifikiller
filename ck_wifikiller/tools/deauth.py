@@ -123,10 +123,11 @@ def send_deauth(
         if result['scapy'] > 0 and not prof.aireplay_after_scapy:
             n = 0
         elif result['scapy'] > 0:
-            n = max(4, min(prof.aireplay_count, 16))
+            # Scapy 已打，仍按 profile 满包数补刀（不再封顶 16），确保踢得下
+            n = prof.aireplay_count
         else:
             n = max(
-                int(getattr(Configuration, 'num_deauths', 8) or 8),
+                int(getattr(Configuration, 'num_deauths', 64) or 64),
                 prof.aireplay_count,
             )
         if n > 0:

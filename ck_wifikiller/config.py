@@ -49,13 +49,13 @@ class Configuration(object):
         cls.show_bssids = False # Show BSSIDs in targets list
         cls.random_mac = False # Should generate a random Mac address at startup.
         cls.no_deauth = False # Deauth hidden networks & WPA handshake targets
-        # aireplay -0 包数：默认 1 太弱，提高到 8
-        cls.num_deauths = 8
+        # aireplay -0 包数：对齐 aireplay-ng 源码 do_attack_deauth 有向 64 帧
+        cls.num_deauths = 64
         # deauth 引擎：auto=有 scapy 则双通道，both/scapy/aireplay
         cls.deauth_engine = 'auto'
-        # Scapy 突发（对齐 auto_attack.py / MT7921U）:
-        #   0 = 自动（精准每向 16、广播每向 32）；>0 强制每向份数
-        #   rounds=4 → 每目标约 64×4=256 帧/次爆发；inter=0.003
+        # Scapy 突发（对齐 aireplay-ng 源码 + auto_attack.py / MT7921U）:
+        #   0 = 自动（精准每向 64、广播每向 128）；>0 强制每向份数
+        #   rounds=4 → 每目标约 256×4=1024 帧/次爆发；inter=0.003
         # 周期: 爆发(×rounds=4) → 静默监听 wpa_deauth_listen 秒 → 再爆发
         # （静默期纯收包等 EAPOL；发包策略按网卡驱动自动选）
         cls.scapy_deauth_count = 0

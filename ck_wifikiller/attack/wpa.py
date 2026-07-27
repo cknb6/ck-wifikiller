@@ -448,6 +448,8 @@ class AttackWPA(Attack):
             Color.pattack(
                 'WPA', target, 'Handshake',
                 t('wpa.deauth_to', target_name))
+            # 每个目标踢完换行，避免定向踢站行被后续广播行 \r 覆盖
+            Color.pl('')
             send_deauth(
                 target.bssid,
                 client_mac=client,

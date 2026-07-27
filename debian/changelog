@@ -1,3 +1,20 @@
+ck-wifikiller (2.5.25-1) unstable; urgency=medium
+
+  * deauth: maximize packet volume to ensure clients are kicked.
+    Scapy per-direction count raised 16->64 (directed) / 32->128
+    (broadcast), matching aireplay-ng do_attack_deauth (64 directed /
+    128 broadcast). Per-burst now 256 frames * 4 rounds = 1024 frames.
+  * aireplay -0 count default 8 -> 64; all NIC profiles aireplay_count
+    unified to 64. Scapy-success aireplay backup no longer capped at 16
+    (uses full profile.aireplay_count).
+  * WPA deauth: print newline after each directed/broadcast target so
+    directed deauth lines are no longer overwritten by the following
+    broadcast line (previously only "*broadcast*" was visible).
+  * attack: raise initial target_wait 20s -> 45s; weak-signal / channel-
+    switch APs need more time to reappear in airodump CSV.
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 14:00:00 +0800
+
 ck-wifikiller (2.5.24-1) unstable; urgency=medium
 
   * WPA deauth: seed known clients from airodump scan before first
