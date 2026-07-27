@@ -200,7 +200,7 @@ class AttackWPA(Attack):
                 timeout=max(2, int(Configuration.wpa_attack_timeout)),
                 on_wait=_on_wait)
 
-            self.clients = []
+            self.clients = AttackWPA._seed_clients(airodump_target)
 
             # Try to load existing handshake
             if Configuration.ignore_old_handshakes == False:
@@ -407,6 +407,22 @@ class AttackWPA(Attack):
         except ValueError:
             return False
         return True
+
+    @staticmethod
+    def _seed_clients(airodump_target):
+        '''从 airodump 扫描结果回填已知客户端 MAC。
+
+        wait_for_target 返回的 target 已含 CSV 解析出的关联客户端
+        （Client.station）。必须回填，否则首轮 deauth 爆发只剩广播——
+        现代手机/笔记本普遍忽略广播 deauth，只对单播 deauth 响应，
+        表现为"踢不下人"。对齐 wifite2：循环前先 seed 已知 STA。
+        '''
+        clients = []
+        for c in getattr(airodump_target, 'clients', []) or []:
+            sta = (getattr(c, 'station', None) or '').upper()
+            if AttackWPA._is_usable_client(sta) and sta not in clients:
+                clients.append(sta)
+        return clients
 
     def deauth(self, target):
         '''一次「爆发」：优先踢已知 STA，再广播。

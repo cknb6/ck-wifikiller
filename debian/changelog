@@ -1,3 +1,16 @@
+ck-wifikiller (2.5.24-1) unstable; urgency=medium
+
+  * WPA deauth: seed known clients from airodump scan before first
+    burst. Previously self.clients was wiped after wait_for_target,
+    discarding Client.station entries parsed from CSV — so the first
+    deauth volley was broadcast-only. Modern phones/laptops ignore
+    broadcast deauth and only respond to directed (unicast) deauth,
+    so handshake capture often failed ("踢不下人"). Aligns with
+    wifite2 which seeds self.clients before the deauth/listen loop.
+  * Extracted AttackWPA._seed_clients (static) + regression tests.
+
+ -- 传康Kk <1837620622@qq.com>  Tue, 28 Jul 2026 12:00:00 +0800
+
 ck-wifikiller (2.5.23-1) unstable; urgency=medium
 
   * PMKID: clear line before final fail msg (stray ')' from shorter
