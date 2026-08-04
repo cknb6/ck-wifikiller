@@ -21,6 +21,13 @@ This file is a braindump of ideas to improve Wifite2 (or forward-looking to "Wif
 | 动态版本 (git describe/env) | ✅ Done |
 | 自动会话日志 | ✅ Done |
 | GitHub Actions 自动 .deb release | ✅ Done |
+| `--recon clients` 在线客户端扫描 | ✅ Done (v2.5.29) |
+| `--dict [file\|dir]` + `CK_WIFI_WORDLIST` env | ✅ Done (v2.5.29) |
+| Kali 桌面快捷方式 (.desktop + SVG) | ✅ Done (v2.5.29) |
+| 握手检测 aircrack-ng 兜底（默认 Kali 可用） | ✅ Done (v2.5.29) |
+| PMKID BSSID 冒号归一化匹配 | ✅ Done (v2.5.29) |
+| `--check`/`--cracked` 离线命令 root/依赖豁免 | ✅ Done (v2.5.30) |
+| cracked.txt 损坏备份 (.bak) | ✅ Done (v2.5.30) |
 | Evil Twin | ⏳ Not implemented (见 EVILTWIN.md) |
 
 ------------------------------------------------------

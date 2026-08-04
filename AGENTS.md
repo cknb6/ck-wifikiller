@@ -7,7 +7,7 @@
 - Wordlist: `wordlists/ck-default-wpa.txt`
 - Build deb: `scripts/build-deb.sh` on Kali/Debian
 
-## 攻击矩阵（v2.5.20 / 2026 工具链）
+## 攻击矩阵（v2.5.30 / 2026 工具链）
 
 | 路径 | 捕获/在线 | 离线爆破 | Kali 依赖 | 备注 |
 |------|-----------|----------|-----------|------|
