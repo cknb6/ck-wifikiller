@@ -30,7 +30,14 @@ class CKWifiKiller(object):
             self._check_update()
             self._start_session_log()
 
-        if os.getuid() != 0 and not Configuration.recon_mode:
+        # 纯离线命令（检查握手包/展示已破解）无需 root，不受全局 root 检查限制
+        offline_cmd = (
+            getattr(Configuration, 'show_cracked', False)
+            or getattr(Configuration, 'check_handshake', False)
+            or getattr(Configuration, 'crack_handshake', False)
+        )
+
+        if os.getuid() != 0 and not Configuration.recon_mode and not offline_cmd:
             Color.pl('{!} {R}%s{W}' % t('need_root'))
             Configuration.exit_gracefully(1)
         elif os.getuid() != 0 and Configuration.recon_mode in ('kismet', 'bettercap'):
@@ -41,7 +48,10 @@ class CKWifiKiller(object):
             Color.pl('{!} {O}%s{W}' % t('need_root_clients'))
             Configuration.exit_gracefully(1)
 
-        if not Configuration.recon_mode and not self._want_help:
+        # 纯离线命令（检查握手包/展示已破解）无需依赖检查（如 aircrack-ng），
+        # 它们在各自实现里对缺失工具已有降级处理
+        if (not Configuration.recon_mode and not self._want_help
+                and not offline_cmd):
             from .tools.dependency import Dependency
             Dependency.run_dependency_check()
 

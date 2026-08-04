@@ -43,8 +43,8 @@ class Dependency(object):
         from .bettercap_wifi import BettercapWifi
 
         apps = [
-                # Aircrack
-                Aircrack,
+                # Aircrack 套件
+                Aircrack, Airmon, Airodump,
                 # wireless/net tools
                 Iwconfig, Ifconfig,
                 # WPS

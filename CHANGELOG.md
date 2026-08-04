@@ -2,7 +2,18 @@
 
 所有重要改动都记录在此文件。
 
-## [v2.5.29] - 未发布
+## [v2.5.30] - 未发布
+
+### 修复
+
+- `--check`/`--cracked`/`--crack` 纯离线命令不再被全局 root 检查与依赖检查拦截（非 root、缺 aircrack-ng 等工具时也能运行，各自实现内已有降级）
+- 依赖检查补入 `airmon-ng`/`airodump-ng`（此前被 import 却未纳入检查列表）
+- `--recon audit` 与 `status` 行为一致（补 Kismet 提示）；`--recon report` 写盘失败不再阻断主流程
+- `cracked.txt` 损坏（非 JSON）时先备份为 `.bak` 再写入，避免覆盖丢失历史破解记录
+- apt 仓库历史 deb 合并列表补全 2.5.15–2.5.29（原停在 2.5.14）
+- `config.py` 删除 `wep_crack_at_ivs` 重复赋值
+
+## [v2.5.29] - 已发布
 
 ### 新增功能
 

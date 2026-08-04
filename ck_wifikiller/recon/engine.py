@@ -145,7 +145,7 @@ class ReconEngine:
             Color.pl('{+}   {C}sudo apt update && sudo apt install -y %s{W}' % ' '.join(miss))
             Color.pl('')
 
-        if mode in ('status', 'kismet', 'report'):
+        if mode in ('status', 'audit', 'kismet', 'report'):
             Kismet.ensure_message()
         if mode == 'kismet':
             Kismet.launch_guide()
@@ -185,4 +185,8 @@ class ReconEngine:
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2, ensure_ascii=False)
             Color.pl('{+} Full recon report: {C}%s{W}' % path)
-            Kismet.write_recon_report()
+            # Kismet 报告写盘失败不阻断主流程（矩阵 JSON 已写出）
+            try:
+                Kismet.write_recon_report()
+            except Exception as exc:
+                Color.pl('{!} {O}Kismet report skipped: %s{W}' % exc)

@@ -57,11 +57,24 @@ class CrackResult(object):
             data = loads(text)
             if not isinstance(data, list):
                 Color.pl('{!} {O}%s is not a JSON list, ignoring previous entries{W}' % name)
+                # 损坏文件先备份，避免后续 save() 覆盖丢失历史
+                cls._backup_corrupted(name)
                 return []
             return [item for item in data if isinstance(item, dict)]
         except Exception as e:
             Color.pl('{!} error while loading %s: %s' % (name, str(e)))
+            cls._backup_corrupted(name)
             return []
+
+    @classmethod
+    def _backup_corrupted(cls, name):
+        '''cracked 文件损坏时备份为 .bak，防止被下次写入覆盖。'''
+        try:
+            if os.path.exists(name) and os.path.getsize(name) > 0:
+                os.replace(name, name + '.bak')
+                Color.pl('{!} {O}backed up corrupted file to %s.bak{W}' % name)
+        except OSError:
+            pass
 
     def save(self):
         ''' Adds this crack result to the cracked file and saves it. '''

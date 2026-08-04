@@ -84,7 +84,6 @@ class Configuration(object):
                                                  # '0' means never restart.
         cls.wep_restart_aircrack = 30  # Seconds to give aircrack to crack
                                                  # before restarting the process.
-        cls.wep_crack_at_ivs = 10000   # Number of IVS to start cracking
         cls.wep_keep_ivs = False       # Retain .ivs files across multiple attacks.
 
         # WPA variables
