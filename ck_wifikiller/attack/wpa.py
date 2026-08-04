@@ -226,6 +226,7 @@ class AttackWPA(Attack):
             if rounds <= 0:
                 rounds = 4
             cycle = 0
+            last_cap_stat = None  # 上次握手判定的 cap 文件 (size, mtime)
 
             while handshake is None and not timeout_timer.ended():
                 if getattr(Configuration, 'path_deadline', None) is not None:
@@ -274,9 +275,18 @@ class AttackWPA(Attack):
                             Color.pl('')
                             self.clients.append(sta)
 
-                    # 检查是否已抓到握手
+                    # 检查是否已抓到握手（节流：仅 cap 文件大小变化时判定，
+                    # 避免每 0.4s 全量复制+aircrack 扫描拖慢捕获）
                     cap_files = airodump.find_files(endswith='.cap')
+                    cur_stat = None
                     if cap_files:
+                        try:
+                            st = os.stat(cap_files[0])
+                            cur_stat = (st.st_size, st.st_mtime)
+                        except OSError:
+                            cur_stat = None
+                    if cap_files and cur_stat != last_cap_stat:
+                        last_cap_stat = cur_stat
                         temp_file = Configuration.temp('handshake.cap.bak')
                         try:
                             copy(cap_files[0], temp_file)

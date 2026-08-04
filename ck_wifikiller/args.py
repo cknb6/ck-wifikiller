@@ -27,6 +27,10 @@ class Arguments(object):
                 formatter_class=lambda prog: argparse.HelpFormatter(
                     prog, max_help_position=80, width=130))
 
+        # 版本号：--version 直接打印并退出 0
+        parser.add_argument('--version', action='version',
+                version='%(prog)s ' + self.config.version)
+
         self._add_global_args(parser.add_argument_group(Color.s('{C}SETTINGS{W}')))
         self._add_wep_args(parser.add_argument_group(Color.s('{C}WEP{W}')))
         self._add_wpa_args(parser.add_argument_group(Color.s('{C}WPA{W}')))
@@ -84,6 +88,7 @@ class Arguments(object):
             help=Color.s('Randomize wireless card MAC address (default: {G}off{W})'))
 
         glob.add_argument('-p',
+            '--scan-time',
             action='store',
             dest='scan_time',
             nargs='?',
@@ -91,7 +96,8 @@ class Arguments(object):
             metavar='scan_time',
             type=int,
             help=Color.s('{G}Pillage{W}: Attack all targets after ' +
-                '{C}scan_time{W} (seconds)'))
+                '{C}scan_time{W} (seconds); ' +
+                'also sets the {C}--recon clients{W} scan window'))
         glob.add_argument('--pillage', help=argparse.SUPPRESS, action='store',
                 dest='scan_time', nargs='?', const=10, type=int)
 
@@ -365,9 +371,11 @@ class Arguments(object):
         wpa.add_argument('--dict',
             action='store',
             dest='wordlist',
-            metavar='[file]',
+            metavar='[file|dir]',
             type=str,
-            help=Color.s('File containing passwords for cracking (default: {G}%s{W})')
+            help=Color.s('File {C}or directory{W} containing passwords for cracking; '
+                'directory auto-picks rockyou.txt / *combined*.txt / *.txt / *.lst '
+                '(default: {G}%s{W}, env {C}CK_WIFI_WORDLIST{W} wins)')
                 % self.config.wordlist)
 
         wpa.add_argument('--wpadt',
@@ -594,10 +602,12 @@ class Arguments(object):
             dest='recon_mode',
             metavar='[mode]',
             type=str,
-            choices=['status', 'audit', 'kismet', 'bettercap', 'report'],
+            choices=['status', 'audit', 'kismet', 'bettercap', 'report', 'clients'],
             help=Color.s(
-                'Recon/audit: {C}status{W}|{C}audit{W}|{C}kismet{W}|{C}bettercap{W}|{C}report{W} '
-                '(Kismet/bettercap/airodump matrix, Kali-ready)'))
+                'Recon/audit: {C}status{W}|{C}audit{W}|{C}kismet{W}|{C}bettercap{W}|{C}report{W}|'
+                '{C}clients{W} '
+                '(Kismet/bettercap/airodump matrix; {C}clients{W} scans for APs with '
+                'online clients, Kali-ready)'))
 
 if __name__ == '__main__':
     from .util.color import Color

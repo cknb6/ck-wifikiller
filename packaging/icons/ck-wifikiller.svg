@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- ck-wifikiller 应用图标：深蓝几何底 + 三弧 WiFi 信号 + 中心点 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a4a6b"/>
+      <stop offset="1" stop-color="#122036"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="url(#bg)" stroke="#4d7ba3" stroke-width="3"/>
+  <path d="M24 48 a40 40 0 0 1 80 0" fill="none" stroke="#4dc3ff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M38 63 a26 26 0 0 1 52 0" fill="none" stroke="#7fd6ff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M52 78 a12 12 0 0 1 24 0" fill="none" stroke="#b2e6ff" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="64" cy="92" r="7" fill="#e8f7ff"/>
+</svg>

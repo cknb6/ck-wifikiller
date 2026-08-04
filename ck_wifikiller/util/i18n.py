@@ -86,6 +86,10 @@ _S: dict[str, tuple[str, str]] = {
         'Kismet/bettercap usually need root',
         'Kismet/bettercap 通常需要 root',
     ),
+    'need_root_clients': (
+        'client scan needs root + monitor interface',
+        '客户端扫描需要 root + 监听网卡',
+    ),
     'attack_done': (
         'finished %d target(s)',
         '完成 %d 个目标',
@@ -434,6 +438,52 @@ _S: dict[str, tuple[str, str]] = {
 
     # option prefix (config load)
     'opt': ('option:', '选项:'),
+
+    # --recon clients
+    'clients.scanning': (
+        'scanning %ds · %d AP · %d online · %ds left · Ctrl+C to stop',
+        '扫描 %ds · %d 个 AP · %d 台在线 · 剩余 %ds · Ctrl+C 结束',
+    ),
+    'clients.title': (
+        'ck-wifikiller · client scan report',
+        'ck-wifikiller · 客户端扫描报告',
+    ),
+    'clients.meta': (
+        'iface %s · scan %ds · %s',
+        '接口 %s · 扫描 %ds · %s',
+    ),
+    'clients.summary': (
+        '%d AP total · %d with online clients · %d online devices',
+        '共 %d 个 AP · %d 个有在线客户端 · %d 台在线设备',
+    ),
+    'clients.online_section': (
+        'AP with online clients (%d):',
+        '有在线客户端的 AP（%d）:',
+    ),
+    'clients.idle_section': (
+        'AP without online clients (%d):',
+        '无在线客户端的 AP（%d）:',
+    ),
+    'clients.devices': (
+        'online devices:',
+        '在线设备:',
+    ),
+    'clients.saved': (
+        'report saved: %s',
+        '报告已保存: %s',
+    ),
+    'clients.oui_note': (
+        'OUI vendor is best-effort from MAC registry',
+        'OUI 厂商仅为 MAC 登记表推测（尽力而为）',
+    ),
+    'clients.hidden': (
+        '[hidden]',
+        '[隐藏]',
+    ),
+    'clients.unknown': (
+        'unknown',
+        '未知',
+    ),
 }
 
 

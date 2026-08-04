@@ -163,6 +163,13 @@ class ReconEngine:
             else:
                 Color.pl('{!} bettercap missing — %s' % BettercapWifi.package_hint())
 
+        if mode == 'clients':
+            # 自动扫描 WiFi 并检测有在线客户端的 AP（需要 root + 监听网卡）
+            from .clients import ClientsScan
+            scan_time = getattr(Configuration, 'scan_time', 0) or None
+            ClientsScan(scan_time=scan_time).run()
+            return
+
         if mode == 'report':
             report = {
                 'generated_at': datetime.now(timezone.utc).isoformat(),

@@ -15,7 +15,8 @@ import os
 import subprocess
 
 # 兜底基线版本（无 git、无环境变量时使用）
-_BASE = '2.5.28-ck'
+# 注意：每次发版需与本 tag 同步（v2.5.x -> 2.5.x-ck）
+_BASE = '2.5.29-ck'
 
 
 def _git_describe() -> str:

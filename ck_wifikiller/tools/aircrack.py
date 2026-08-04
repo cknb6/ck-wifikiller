@@ -11,6 +11,7 @@ from ..config import Configuration
 
 import os
 import re
+import select
 import time
 
 class Aircrack(Dependency):
@@ -118,12 +119,15 @@ class Aircrack(Dependency):
         percent = num_kps = 0.0
         eta_str = '?'
         current_key = ''
+        out_fd = crack_proc.pid.stdout
         while crack_proc.poll() is None:
             if max_seconds is not None and (time.time() - start) >= max_seconds:
                 crack_proc.interrupt()
                 break
-            # 非阻塞：无数据时 readline 可能阻塞；用短超时轮询
-            line = crack_proc.pid.stdout.readline()
+            ready, _, _ = select.select([out_fd], [], [], 0.1)
+            if not ready:
+                continue
+            line = out_fd.readline()
             if not line:
                 time.sleep(0.05)
                 continue

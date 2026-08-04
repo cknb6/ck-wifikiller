@@ -101,14 +101,21 @@ class AttackPMKID(Attack):
 
         pmkid_hash = None
         pcaptool = HcxPcapTool(self.target)
+        last_size = -1  # 仅 pcapng 增长时才重新转换，避免每 1s 全量跑 hcxpcapngtool
         while self.timer.remaining() > 0:
             # 路径总截止：提前结束捕获，把剩余时间留给爆破
             if getattr(Configuration, 'path_deadline', None) is not None:
                 if time.time() >= Configuration.path_deadline:
                     break
-            pmkid_hash = pcaptool.get_pmkid_hash(self.pcapng_file)
-            if pmkid_hash is not None:
-                break
+            try:
+                cur_size = os.path.getsize(self.pcapng_file)
+            except OSError:
+                cur_size = -1
+            if cur_size > 0 and cur_size != last_size:
+                last_size = cur_size
+                pmkid_hash = pcaptool.get_pmkid_hash(self.pcapng_file)
+                if pmkid_hash is not None:
+                    break
             Color.pattack('PMKID', self.target, 'CAPTURE',
                           t('pmkid.wait', str(self.timer)))
             time.sleep(1)

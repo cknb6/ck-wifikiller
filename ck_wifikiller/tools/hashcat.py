@@ -599,10 +599,11 @@ class HcxPcapTool(Dependency):
                         continue
                     fields = line.split('*')
                     # WPA*01*pmkid*macap*macclient*essid...
-                    if len(fields) >= 5 and fields[3].lower() == self.bssid:
+                    # hcxpcapngtool 的 MAC 带冒号（aa:bb:...），self.bssid 为无冒号形式
+                    if len(fields) >= 5 and fields[3].lower().replace(':', '') == self.bssid:
                         matching = line
                         break
-                    if len(fields) >= 4 and fields[2].lower() == self.bssid:
+                    if len(fields) >= 4 and fields[2].lower().replace(':', '') == self.bssid:
                         # 极旧格式容错
                         matching = line
                         break

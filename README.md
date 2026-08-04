@@ -10,11 +10,11 @@ Authorized security testing only. 仅限授权安全测试。
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![hashcat](https://img.shields.io/badge/hashcat-m%2022000-49A942)](https://hashcat.net/)
 [![License](https://img.shields.io/badge/License-GPL--2.0-A42E2B)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v2.5.15-success)](https://github.com/cknb6/ck-wifikiller/releases)
+[![Release](https://img.shields.io/badge/Release-v2.5.29-success)](https://github.com/cknb6/ck-wifikiller/releases)
 
 ```
 GitHub:  https://github.com/cknb6/ck-wifikiller
-Version: CK_WIFI_VERSION env > git describe > 2.5.15-ck
+Version: CK_WIFI_VERSION env > git describe > 2.5.29-ck
 Author:  传康Kk（万能程序员）
 WeChat:  1837620622  (赞助备注「wifi赞助」/ 商务「商务合作」)
 Email:   2040168455@qq.com
@@ -45,7 +45,10 @@ It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestra
 | hashcat `-m 2500` / `-m 16800` | Unified **`-m 22000`** (PMKID + EAPOL) |
 | hcxdumptool `--filterlist` | **BPF** (`--bpf`) + undirected probe; `--exitoneapol 7` with BPF |
 | Small top4800 wordlist only | Bundled `ck-default-wpa.txt` (~400k+ lines, WPA 8–63, CN-first) |
-| No recon layer | `--recon` → Kismet / bettercap / status matrix |
+| `--dict <file>` only, dirs rejected | `--dict [file\|dir]` + `CK_WIFI_WORDLIST` env (dir auto-picks rockyou/combined lists) |
+| No recon layer | `--recon` → Kismet / bettercap / status matrix + **`--recon clients` online-client scan** |
+| Handshake check trusts tshark/pyrit only | **aircrack-ng fallback** — works on stock Kali (no tshark/pyrit) |
+| PMKID BSSID match bug (upstream) | Colon-normalized MAC matching in `hcxpcapngtool` output |
 | Single dictionary crack | rules / mask / increment + optional CN profile |
 | No vendor context | OUI fingerprint + brand-ordered attack paths |
 | No WPA3 awareness | Detect SAE / Transition Mode and warn |
@@ -64,12 +67,22 @@ It is **not** a rewrite of Kismet, hashcat, or aircrack-ng. It is an **orchestra
 - PMKID path via `hcxdumptool` → `hcxpcapngtool` → hashcat `-m 22000`
 - BPF filter retains undirected probes (`addr3` target **or** broadcast); `--exitoneapol 7` only with BPF
 - WPA handshake path via airodump/aireplay + aircrack/hashcat/john/cowpatty
+  - Handshake validation falls back to **aircrack-ng** when tshark/pyrit are absent (stock Kali)
+  - Capture loop throttled: re-checks the cap only when it grows (no 0.4s full-file rescans)
 - WPS Pixie-Dust / PIN via reaver (or bully); brand-ordered **weighted** path slices (min 15s, default 90s/AP)
 - Capture-first: full slice for capture; early success leaves wall-clock for hashcat/aircrack
 - Handshake deauth: Scapy bidirectional burst + aireplay (`--deauth-engine auto`); stronger on weak USB NICs
 - Handshake deauth interval synced to capture window (deauth at start)
 - Offline crack: `--rules`, `--mask`, `--increment`, `--hc-args`; budget exhausted → skip crack
 - Closed loop: `--auto` (scan 15s then all) or `-p N` pillage
+
+### Recon: online client scan (`--recon clients`)
+
+- Scans for APs and lists **currently connected clients** (online first, then idle APs)
+- Per-AP rows: BSSID / ESSID / channel / encryption / power / client count
+- Client vendor via OUI database (best-effort); hidden SSIDs flagged
+- Saves a plain-text report `ck-clients-report.txt` in the working directory
+- Requires root (monitor mode); duration via `--scan-time` (default 15s)
 
 ### CN audit profile (`--cn`)
 
@@ -132,6 +145,11 @@ apt-cache policy ck-wifikiller
 
 Hard dependencies pulled by the package: `aircrack-ng`, `hashcat`, `hcxtools`, `hcxdumptool`, `tshark` (or `wireshark-common`), `iw`, `net-tools`.
 
+The package installs a **desktop launcher** (`/usr/share/applications/ck-wifikiller.desktop`, icon in
+`/usr/share/icons/hicolor/scalable/apps/`) so Kali shows "CK WifiKiller" in the application menu;
+it opens a terminal for the interactive scan flow. Handshake validation needs no tshark on Kali —
+aircrack-ng is used as fallback.
+
 ### 2) Manual `.deb` from Releases (no apt repo)
 
 ```bash
@@ -176,8 +194,12 @@ sudo ck-wifikiller --recon status           # tool matrix + dependency probe
 sudo ck-wifikiller --recon kismet           # Kismet guidance / REST probe
 sudo ck-wifikiller --recon bettercap        # generate bettercap caplet
 sudo ck-wifikiller --recon report           # summary JSON report
+sudo ck-wifikiller --recon clients          # online-client scan → ck-clients-report.txt
+sudo ck-wifikiller --recon clients --scan-time 30   # longer client scan window
 sudo ck-wifikiller --pmkid                  # PMKID-only path
-sudo ck-wifikiller --dict /path/wl.txt      # custom wordlist
+sudo ck-wifikiller --dict /path/wl.txt      # custom wordlist file
+sudo ck-wifikiller --dict /path/wl-dir/     # custom wordlist DIRECTORY (auto-pick)
+CK_WIFI_WORDLIST=/path/wl.txt sudo ck-wifikiller   # wordlist via environment variable
 sudo ck-wifikiller --cn                     # force CN audit profile
 sudo ck-wifikiller --no-cn                  # disable CN profile + auto detect
 sudo ck-wifikiller --rules /usr/share/hashcat/rules/best64.rule
@@ -189,11 +211,13 @@ sudo ck-wifikiller --check hs/handshake.cap
 sudo ck-wifikiller --cracked                # show saved results
 ```
 
-Default wordlist resolution order (first existing file wins):
+Wordlist resolution order (first existing wins):
 
-1. `wordlists/ck-default-wpa.txt` (repo / package: WPA 8–63 only, CN-first, ~500k+)
-2. `wordlists/wpa-top4800.txt`
-3. system paths under `/usr/share/ck-wifikiller/...` and common dict locations
+1. `CK_WIFI_WORDLIST` env (highest priority)
+2. `--dict [file|dir]` — dir auto-picks: exact common names (`rockyou.txt`, `*_combined.txt`, …), then `wifi*.txt` / `*.txt` / `*.lst` glob
+3. `wordlists/ck-default-wpa.txt` (repo / package: WPA 8–63 only, CN-first, ~500k+)
+4. `wordlists/wpa-top4800.txt`
+5. system paths under `/usr/share/ck-wifikiller/...` and common dict locations
 
 Regenerate the default list with:
 
@@ -267,7 +291,7 @@ Tag-triggered CI (`.github/workflows/build-deb.yml`):
 3. **publish-release** — GitHub Release with `.deb` and `SHA256SUMS`
 
 ```bash
-git tag v2.5.15 && git push origin v2.5.15
+git tag v2.5.29 && git push origin v2.5.29
 ```
 
 Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is the canonical path.
@@ -282,7 +306,9 @@ Local `.deb` build is optional via `scripts/build-deb.sh` on Debian/Kali; CI is 
 python3 -m unittest discover -s tests -v
 ```
 
-Coverage includes: argv/shell safety, BSSID validation, hashcat argument ordering, CN region detection, OUI advisory constraints, process wrapper, temp path safety, deauth station MAC, cracked-file robustness, CLI entrypoint.
+Coverage includes: argv/shell safety, BSSID validation, hashcat argument ordering, CN region detection, OUI advisory constraints, process wrapper, temp path safety, deauth station MAC, cracked-file robustness, CLI entrypoint, wordlist resolution (file/dir/env), client-scan reporting, PMKID MAC matching (130+ tests).
+
+See [CHANGELOG.md](CHANGELOG.md) for the version history.
 
 ---
 
@@ -290,6 +316,7 @@ Coverage includes: argv/shell safety, BSSID validation, hashcat argument orderin
 
 | File | Content |
 |------|---------|
+| [CHANGELOG.md](CHANGELOG.md) | Version history / 版本报告 |
 | [docs/INSTALL-KALI.md](docs/INSTALL-KALI.md) | Kali install notes |
 | [docs/TOOLCHAIN-2026.md](docs/TOOLCHAIN-2026.md) | Toolchain layering |
 | [PMKID.md](PMKID.md) | PMKID notes |

@@ -36,6 +36,11 @@ class CKWifiKiller(object):
         elif os.getuid() != 0 and Configuration.recon_mode in ('kismet', 'bettercap'):
             Color.pl('{!} {O}%s{W}' % t('need_root_recon'))
 
+        # 客户端扫描需要 root + 监听网卡
+        if Configuration.recon_mode == 'clients' and os.getuid() != 0:
+            Color.pl('{!} {O}%s{W}' % t('need_root_clients'))
+            Configuration.exit_gracefully(1)
+
         if not Configuration.recon_mode and not self._want_help:
             from .tools.dependency import Dependency
             Dependency.run_dependency_check()
@@ -66,6 +71,9 @@ class CKWifiKiller(object):
             from .recon.engine import ReconEngine
             if self._session:
                 self._session.event('recon', {'mode': Configuration.recon_mode})
+            if Configuration.recon_mode == 'clients':
+                # 客户端扫描：自动选择监听网卡（需 root）
+                Configuration.get_monitor_mode_interface()
             ReconEngine.run_cli(Configuration.recon_mode)
             return
 

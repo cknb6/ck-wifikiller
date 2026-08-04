@@ -5,4 +5,6 @@ include docs/*
 include wordlists/ck-default-wpa.txt
 include wordlists/wpa-top4800.txt
 include bin/ck-wifikiller
+include packaging/ck-wifikiller.desktop
+include packaging/icons/ck-wifikiller.svg
 recursive-include ck_wifikiller *.py

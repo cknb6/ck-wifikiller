@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 
 from .util.color import Color
 from .tools.macchanger import Macchanger
@@ -136,15 +137,24 @@ class Configuration(object):
             './wordlists/ck-default-wpa.txt',
             './wordlists/wpa-top4800.txt',
             './wordlist-top4800-probable.txt',
+            # 安装后（deb / pip）字典落在 share/ck-wifikiller/wordlists/
             '/usr/share/ck-wifikiller/wordlists/ck-default-wpa.txt',
             '/usr/local/share/ck-wifikiller/wordlists/ck-default-wpa.txt',
+            '/usr/share/ck-wifikiller/wordlists/rockyou.txt',
+            '/usr/local/share/ck-wifikiller/wordlists/rockyou.txt',
             '/usr/share/dict/wordlist-top4800-probable.txt',
             '/usr/local/share/dict/wordlist-top4800-probable.txt',
             '/usr/share/wordlists/fern-wifi/common.txt',
         ]
+        # 环境变量显式指定字典（最高优先级）
+        env_wl = os.environ.get('CK_WIFI_WORDLIST', '').strip()
+        if env_wl:
+            wordlists.insert(0, env_wl)
         for wlist in wordlists:
-            if os.path.exists(wlist):
-                cls.wordlist = wlist
+            # 支持文件或目录：目录内自动搜索常见字典名
+            resolved, _how = cls.resolve_wordlist(wlist)
+            if resolved:
+                cls.wordlist = resolved
                 break
 
         # WPS variables
@@ -196,6 +206,14 @@ class Configuration(object):
         cls.parse_hashcat_args(args)
         cls.parse_schedule_args(args)
         cls.parse_encryption()
+
+        # 打印字典加载状态，帮助模式不打扰
+        if '-h' not in sys.argv and '--help' not in sys.argv:
+            if cls.wordlist:
+                Color.pl('{+} {D}wordlist: {G}%s{W}' % cls.wordlist)
+            else:
+                Color.pl('{!} {O}no wordlist found; handshake/PMKID cracks will be skipped '
+                         '(use {C}--dict <file|dir>{O} or env {C}CK_WIFI_WORDLIST{O}){W}')
 
         # EvilTwin
         '''
@@ -369,6 +387,52 @@ class Configuration(object):
             cls.wep_keep_ivs = args.wep_keep_ivs
             Color.pl('{+} {C}option:{W} keep .ivs files across multiple WEP attacks')
 
+    # 目录内常见字典名（按优先级精确匹配）
+    WORDLIST_COMMON_NAMES = (
+        'rockyou.txt',
+        'wifi_cn_combined.txt',
+        'wifi_combined.txt',
+        'wpa_cn_combined.txt',
+        'ck-default-wpa.txt',
+        'wpa-top4800.txt',
+        'password.lst',
+        'passwords.txt',
+        'common.txt',
+        'wordlist.txt',
+    )
+    # 目录内兜底匹配模式（按优先级）
+    WORDLIST_PATTERNS = ('*combined*.txt', 'wifi*.txt', '*.txt', '*.lst')
+
+    @classmethod
+    def resolve_wordlist(cls, path):
+        '''把用户给定的字典路径解析为可用字典文件。
+
+        支持三种输入：
+          - 具体文件：存在即返回
+          - 目录：按优先级在目录内搜索常见字典名与通配模式
+          - 环境变量 / 配置候选：走同一套逻辑（文件或目录都接受）
+
+        返回 (filepath|None, how)，how 取值：file / dir / missing / dir_empty / empty。
+        '''
+        import glob
+        if not path:
+            return None, 'empty'
+        if os.path.isfile(path):
+            return path, 'file'
+        if not os.path.isdir(path):
+            return None, 'missing'
+        # 目录：先精确匹配常见字典名
+        for name in cls.WORDLIST_COMMON_NAMES:
+            cand = os.path.join(path, name)
+            if os.path.isfile(cand):
+                return cand, 'dir'
+        # 再按通配模式匹配（只取第一个）
+        for pattern in cls.WORDLIST_PATTERNS:
+            hits = sorted(f for f in glob.glob(os.path.join(path, pattern)) if os.path.isfile(f))
+            if hits:
+                return hits[0], 'dir'
+        return None, 'dir_empty'
+
     @classmethod
     def parse_wpa_args(cls, args):
         '''Parses WPA-specific arguments'''
@@ -376,15 +440,20 @@ class Configuration(object):
             cls.wpa_filter = args.wpa_filter
 
         if args.wordlist:
-            if not os.path.exists(args.wordlist):
+            resolved, how = cls.resolve_wordlist(args.wordlist)
+            if resolved is None:
                 cls.wordlist = None
-                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} was not found, ck-wifikiller will NOT attempt to crack handshakes' % args.wordlist)
-            elif os.path.isfile(args.wordlist):
-                cls.wordlist = args.wordlist
-                Color.pl('{+} {C}option:{W} using wordlist {G}%s{W} to crack WPA handshakes' % args.wordlist)
-            elif os.path.isdir(args.wordlist):
-                cls.wordlist = None
-                Color.pl('{+} {C}option:{O} wordlist {R}%s{O} is a directory, not a file. ck-wifikiller will NOT crack' % args.wordlist)
+                if how == 'dir_empty':
+                    # 目录存在但里面没有任何字典文件
+                    Color.pl('{+} {C}option:{O} wordlist dir {R}%s{O} contains no dict file (rockyou.txt / *.txt / *.lst), ck-wifikiller will NOT crack' % args.wordlist)
+                else:
+                    Color.pl('{+} {C}option:{O} wordlist {R}%s{O} was not found, ck-wifikiller will NOT attempt to crack handshakes' % args.wordlist)
+            elif how == 'dir':
+                cls.wordlist = resolved
+                Color.pl('{+} {C}option:{W} %s{O} is a directory, using {G}%s{W} to crack WPA handshakes' % (args.wordlist, resolved))
+            else:
+                cls.wordlist = resolved
+                Color.pl('{+} {C}option:{W} using wordlist {G}%s{W} to crack WPA handshakes' % resolved)
 
         if args.wpa_deauth_timeout:
             cls.wpa_deauth_timeout = max(3, int(args.wpa_deauth_timeout))

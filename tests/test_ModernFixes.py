@@ -60,6 +60,10 @@ class TestInputAndCommandSafety(unittest.TestCase):
         calls = []
 
         class FakeProcess:
+            @staticmethod
+            def exists(_name):
+                return True
+
             def __init__(self, command, **kwargs):
                 calls.append({'command': command, 'stdin': None, 'kwargs': kwargs})
 

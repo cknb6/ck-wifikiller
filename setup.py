@@ -23,6 +23,9 @@ setup(
             'wordlists/ck-default-wpa.txt',
             'wordlists/wpa-top4800.txt',
         ]),
+        # 桌面快捷方式与图标（deb 与 pip 安装都会带上，Kali 菜单一键启动）
+        ('share/applications', ['packaging/ck-wifikiller.desktop']),
+        ('share/icons/hicolor/scalable/apps', ['packaging/icons/ck-wifikiller.svg']),
     ],
     entry_points={
         'console_scripts': [

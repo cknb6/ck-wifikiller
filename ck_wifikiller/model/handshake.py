@@ -74,9 +74,10 @@ class Handshake(object):
         if len(self.tshark_handshakes()) > 0:   return True
         if len(self.pyrit_handshakes()) > 0:    return True
 
-        # TODO: Can we trust cowpatty & aircrack?
-        #if len(self.cowpatty_handshakes()) > 0: return True
-        #if len(self.aircrack_handshakes()) > 0: return True
+        # aircrack 判定可靠（能解出 EAPOL 即输出 handshake 计数），
+        # 且 Kali 默认只装 aircrack-ng（无 tshark/pyrit）：
+        # 不启用会在 Kali 上恒判 False，导致「踢下线成功却抓不到握手」。
+        if len(self.aircrack_handshakes()) > 0: return True
 
         return False
 
@@ -127,6 +128,9 @@ class Handshake(object):
             '-b', self.bssid,
             self.capfile,
         ]
+        # aircrack-ng 缺失时（如精简环境）返回空，不抛异常；has_handshake 继续用其它工具
+        if not Process.exists('aircrack-ng'):
+            return []
         process = Process(command)
         process.stdin('\n')
         (stdout, stderr) = process.get_output()

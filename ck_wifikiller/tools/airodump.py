@@ -137,13 +137,13 @@ class Airodump(Dependency):
 
         # Remove .cap and .xor files from pwd
         for fil in os.listdir('.'):
-            if fil.startswith('replay_') and fil.endswith('.cap') or fil.endswith('.xor'):
+            if fil.startswith('replay_') and (fil.endswith('.cap') or fil.endswith('.xor')):
                 os.remove(fil)
 
         # Remove replay/cap/xor files from temp
         temp_dir = Configuration.temp()
         for fil in os.listdir(temp_dir):
-            if fil.startswith('replay_') and fil.endswith('.cap') or fil.endswith('.xor'):
+            if fil.startswith('replay_') and (fil.endswith('.cap') or fil.endswith('.xor')):
                 os.remove(os.path.join(temp_dir, fil))
 
     def get_targets(self, old_targets=[], apply_filter=True):

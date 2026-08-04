@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=ck-wifikiller
+Name[zh_CN]=ck-wifikiller 无线审计
+GenericName=Wireless Auditor
+GenericName[zh_CN]=无线审计工具
+Comment=Wireless auditor for Kali (PMKID/handshake/WPS/Kismet recon)
+Comment[zh_CN]=Kali 无线审计（PMKID/握手/WPS/Kismet 侦察）
+Exec=ck-wifikiller
+TryExec=ck-wifikiller
+Icon=ck-wifikiller
+Terminal=true
+StartupNotify=false
+Categories=System;Security;Network;ConsoleOnly;
+Keywords=wifi;wlan;wireless;audit;security;crack;pmkid;handshake;kismet;
