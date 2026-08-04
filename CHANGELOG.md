@@ -1,10 +1,16 @@
 # Changelog
 
-所有重要改动都记录在此文件。
+所有重要改动都记录在此文件 / All notable changes are documented here.
 
-## [v2.5.30] - 未发布
+## [v2.5.30] - 未发布 / Unreleased
 
-### 修复
+**EN**: Offline commands (`--check`/`--cracked`/`--crack`) exempt from root & hard
+dependency checks; `airmon-ng`/`airodump-ng` added to dependency check; `--recon
+audit` aligned with `status`; `--recon report` tolerates Kismet write failure;
+corrupted `cracked.txt` backed up to `.bak` before rewrite; CI apt-repo history
+completed 2.5.15–2.5.29; removed duplicate config assignment.
+
+### 修复 / Fixes
 
 - `--check`/`--cracked`/`--crack` 纯离线命令不再被全局 root 检查与依赖检查拦截（非 root、缺 aircrack-ng 等工具时也能运行，各自实现内已有降级）
 - 依赖检查补入 `airmon-ng`/`airodump-ng`（此前被 import 却未纳入检查列表）
@@ -13,7 +19,14 @@
 - apt 仓库历史 deb 合并列表补全 2.5.15–2.5.29（原停在 2.5.14）
 - `config.py` 删除 `wep_crack_at_ivs` 重复赋值
 
-## [v2.5.29] - 已发布
+## [v2.5.29] - 已发布 / Released
+
+**EN**: New `--recon clients` online-client scan; `--dict [file|dir]` + `CK_WIFI_WORDLIST`;
+Kali desktop launcher. Root fix: handshake check now falls back to aircrack-ng
+(stock Kali lacks tshark/pyrit) so deauth no longer times out waiting forever;
+PMKID BSSID colon-normalization fix; aircrack crack deadlock fixed via select
+polling; capture re-validation throttled to file-change only; `--scan-time`/
+`--version` registered; PMKID regression tests added (132 tests pass).
 
 ### 新增功能
 
